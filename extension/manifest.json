@@ -8,8 +8,11 @@
     "type": "module"
   },
   "options_ui": {
-    "page": "options.html",
+    "page": "sidepanel.html",
     "open_in_tab": true
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "action": {
     "default_title": "LinkedIn Bridge for n8n"
@@ -21,7 +24,8 @@
     "alarms",
     "scripting",
     "cookies",
-    "webNavigation"
+    "webNavigation",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://*.linkedin.com/*"

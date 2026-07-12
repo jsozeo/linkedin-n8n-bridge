@@ -65,6 +65,28 @@ label.inline > span { margin: 0; font-weight: 500; }
 label.inline input[type="checkbox"] { width: auto; }
 .hint.err { color: var(--danger); }
 .hint.ok { color: var(--ok); }
+
+/* Side panel: the container is narrow, so tighten the layout. */
+body.sidepanel main { max-width: none; margin: 12px auto; padding: 0 12px 40px; }
+body.sidepanel header h1 { font-size: 17px; }
+body.sidepanel header .sub { font-size: 12px; margin-bottom: 16px; }
+body.sidepanel .card { padding: 12px 14px; }
+
+.card.accent { border-color: var(--accent); }
+.actions.tight { margin-top: 12px; }
+.result { margin-top: 12px; }
+.steps { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.chip.bad { color: var(--danger); border-color: var(--danger); }
+.result pre { max-height: 340px; overflow: auto; }
 .row { display: flex; gap: 8px; }
 .row > input { flex: 1; }
 button {

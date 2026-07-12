@@ -191,6 +191,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     } else if (msg?.cmd === 'status') {
       const state = await chrome.storage.local.get(['nextRunAt', 'lastRun', 'scheduleError']);
       sendResponse({ ok: true, ...state, cycleRunning });
+    } else if (msg?.cmd === 'manual-run') {
+      // Run a single command directly (no n8n round-trip) — used by the side
+      // panel's manual mode.
+      const start = Date.now();
+      try {
+        const data = await dispatch(msg.type, msg.params || {});
+        sendResponse({ ok: true, data, durationMs: Date.now() - start });
+      } catch (err) {
+        sendResponse({
+          ok: false,
+          error: { message: err.message || String(err), code: err.code || 'UNKNOWN' },
+          durationMs: Date.now() - start,
+        });
+      }
     } else {
       sendResponse({ ok: false, error: 'unknown command' });
     }
@@ -198,10 +212,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true; // keep the message channel open for the async response
 });
 
-// Toolbar click opens the settings page.
-chrome.action.onClicked.addListener(() => {
-  chrome.runtime.openOptionsPage();
-});
+// Clicking the toolbar icon opens the side panel (the extension's home).
+chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
 
 // Arm on cold SW boot.
 scheduleNext();

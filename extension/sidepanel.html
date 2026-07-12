@@ -2,28 +2,60 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>LinkedIn Bridge for n8n — Settings</title>
+  <title>LinkedIn Bridge for n8n</title>
   <link rel="stylesheet" href="options.css">
 </head>
-<body>
+<body class="sidepanel">
   <main>
     <header>
       <h1>LinkedIn Bridge for n8n</h1>
-      <p class="sub">Runs browser actions from your n8n workflows on a schedule you control. Your LinkedIn session stays in this browser — only your own n8n instance is contacted.</p>
+      <p class="sub">Drive LinkedIn from n8n on a schedule — or run a single action manually below.</p>
     </header>
+
+    <section class="card accent">
+      <h2>Manual run</h2>
+      <label>
+        <span>LinkedIn URL</span>
+        <input id="manualUrl" type="url" autocomplete="off" placeholder="https://www.linkedin.com/in/…" />
+      </label>
+      <label>
+        <span>Action</span>
+        <select id="manualAction">
+          <option value="auto">Auto-detect from URL (recommended)</option>
+          <option value="profile">Profile → structured data</option>
+          <option value="peopleCompany">Company → info + people</option>
+          <option value="posts">Posts feed → list</option>
+          <option value="comments">Post → post + comments</option>
+          <option value="jobs">Jobs → list</option>
+          <option value="open">Just open the page</option>
+        </select>
+      </label>
+      <label class="inline">
+        <input id="manualActive" type="checkbox" checked />
+        <span>Show the tab while it runs</span>
+      </label>
+      <div class="actions tight">
+        <button id="manualRun" class="primary" type="button">Run</button>
+        <span id="manualStatus" class="status"></span>
+      </div>
+      <div id="manualResult" class="result" hidden>
+        <div id="manualSteps" class="steps"></div>
+        <pre id="manualJson"></pre>
+      </div>
+    </section>
 
     <section class="card">
       <h2>Connection</h2>
       <label>
-        <span>n8n poll webhook URL <em>(required — polled on your schedule; must accept GET)</em></span>
-        <input id="pollUrl" type="url" autocomplete="off" placeholder="https://your-n8n.example.com/webhook/linkedin-bridge-poll" />
+        <span>n8n poll webhook URL <em>(GET)</em></span>
+        <input id="pollUrl" type="url" autocomplete="off" placeholder="https://your-n8n/webhook/linkedin-bridge-poll" />
       </label>
       <label>
-        <span>n8n result webhook URL <em>(optional — receives task results via POST)</em></span>
-        <input id="resultUrl" type="url" autocomplete="off" placeholder="https://your-n8n.example.com/webhook/linkedin-bridge-result" />
+        <span>n8n result webhook URL <em>(optional, POST)</em></span>
+        <input id="resultUrl" type="url" autocomplete="off" placeholder="https://your-n8n/webhook/linkedin-bridge-result" />
       </label>
       <label>
-        <span>Shared token <em>(set the same value on the n8n side)</em></span>
+        <span>Shared token</span>
         <input id="token" type="password" autocomplete="off" placeholder="a long random secret…" />
       </label>
       <p class="hint">
@@ -62,10 +94,10 @@
     <section class="card">
       <h2>Identity</h2>
       <label>
-        <span>Client ID <em>(identifies this browser to your workflow)</em></span>
+        <span>Client ID</span>
         <div class="row">
           <input id="clientId" type="text" autocomplete="off" placeholder="auto-generated…" />
-          <button id="regenClientId" class="ghost" type="button">Regenerate</button>
+          <button id="regenClientId" class="ghost" type="button">Regen</button>
         </div>
       </label>
     </section>
@@ -73,7 +105,6 @@
     <section class="actions">
       <button id="save" class="primary" type="button">Save</button>
       <button id="runNow" class="ghost" type="button">Run now</button>
-      <button id="reload" class="ghost" type="button">Reload</button>
       <button id="clear" class="danger" type="button">Clear all</button>
       <span id="status" class="status"></span>
     </section>
@@ -83,6 +114,6 @@
       <pre id="diagnostics">loading…</pre>
     </section>
   </main>
-  <script src="options.js" type="module"></script>
+  <script src="sidepanel.js" type="module"></script>
 </body>
 </html>

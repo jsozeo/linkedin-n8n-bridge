@@ -79,6 +79,28 @@ secret.
 ### Cookies (`src/commands/cookies.js`)
 `get_cookies`, `set_cookies`, `clear_cookies`.
 
+### LinkedIn extraction (`src/commands/linkedin.js`)
+| Command | Params | Returns |
+|---|---|---|
+| `linkedin_extract` | `{ url, kind?, active?, keepTab?, timeoutMs? }` | `{ skillId, url, targetUrl, durationMs, result, steps }` |
+| `list_linkedin_skills` | — | `{ skills: [{ id, kind, pattern }] }` |
+
+`linkedin_extract` runs the full pipeline (open → wait → scroll → evaluate →
+close) with a DOM extractor auto-detected from the URL, or forced via `kind`
+(`profile`, `peopleCompany`, `posts`, `comments`, `jobs`). Set `active: true` to
+watch the tab (used by the side panel's manual mode); leave it `false` for
+background scheduled runs. The extractors live in
+[`src/linkedin/`](./src/linkedin/) and lean on stable anchors (`componentkey`,
+`aria-label`, heading text, href patterns) instead of hashed CSS classes.
+
+## UI: side panel
+
+[`sidepanel.html`](./sidepanel.html) / [`sidepanel.js`](./sidepanel.js) is the
+extension's home (opened by clicking the toolbar icon, and also registered as
+the options page). It holds the settings form and a **Manual run** section that
+fires a single `linkedin_extract` (or `open_tab`) against a URL and shows the
+pipeline steps + structured result inline.
+
 ## Architecture notes
 
 - [`src/background.js`](./src/background.js) — the scheduler. Computes the next

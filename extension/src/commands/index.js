@@ -11,6 +11,7 @@ import * as extract from './extract.js';
 import * as evaluate from './evaluate.js';
 import * as screenshot from './screenshot.js';
 import * as cookies from './cookies.js';
+import * as linkedin from './linkedin.js';
 
 const handlers = {
   // Built-in
@@ -68,6 +69,10 @@ const handlers = {
   get_cookies:   cookies.get_cookies,
   set_cookies:   cookies.set_cookies,
   clear_cookies: cookies.clear_cookies,
+
+  // LinkedIn high-level extraction
+  linkedin_extract:      linkedin.linkedin_extract,
+  list_linkedin_skills:  linkedin.list_linkedin_skills,
 };
 
 export async function dispatch(type, params) {

@@ -43,16 +43,51 @@ See [`extension/README.md`](./extension/README.md) for the full command
 catalogue (`open_tab`, `navigate`, `mouse_click`, `type_text`, `get_text`,
 `evaluate_js`, `screenshot`, …).
 
+### LinkedIn extractors (built-in)
+
+Beyond the generic primitives, one high-level command turns a LinkedIn URL into
+structured JSON in a single call:
+
+```json
+{ "type": "linkedin_extract", "params": { "url": "https://www.linkedin.com/in/some-profile/" } }
+```
+
+It opens the page, waits, scrolls to trigger lazy-loading, runs a battle-tested
+DOM extractor, and returns clean data. The extractor is auto-detected from the
+URL (or forced with `params.kind`):
+
+| `kind` | Handles | Returns |
+|---|---|---|
+| `profile` | `/in/<slug>/` | identity, about, experiences, education, skills, languages, recent activity… |
+| `peopleCompany` | `/company/<slug>/[people/]` | company info + people list |
+| `posts` | `/feed/`, `/in/<slug>/recent-activity/…` | list of posts with engagement |
+| `comments` | `/feed/update/…`, `/posts/…` | the post + its comments |
+| `jobs` | `/jobs/search`, `/jobs/collections`, `/jobs/view/…` | job cards |
+
+These extractors avoid hashed CSS classes and lean on stable anchors
+(`componentkey`, `aria-label`, section heading text, href patterns), so they
+survive LinkedIn's frequent redesigns. They are multilingual (EN/FR).
+
+### Side panel & manual mode
+
+The extension's home is a **side panel** (click the toolbar icon). It holds all
+the settings **and** a **Manual run** section: paste a LinkedIn URL, pick an
+action, hit *Run*, watch the tab work, and inspect the structured result — no
+n8n required. Great for trying things out before wiring a workflow.
+
 ## Install (developer / unpacked)
 
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. Click **Load unpacked** and select the `extension/` folder.
-3. Click the extension's icon (or open its **Options**) and fill in:
+3. Click the extension's icon to open the **side panel**, then fill in:
    - **n8n poll webhook URL** — must accept `GET`.
    - **n8n result webhook URL** — optional, receives `POST`.
    - **Shared token** — click *generate*; set the same value on the n8n side.
    - **Schedule** — enable it and pick a cron preset (or write your own).
 4. Save. When you save, Chrome asks permission to contact your n8n host — accept.
+
+Tip: you don't need n8n to try it — use the **Manual run** section at the top of
+the side panel to run an extractor against any LinkedIn URL right away.
 
 A published Chrome Web Store build will follow; until then, use the unpacked
 extension above.
@@ -95,7 +130,9 @@ responsible for what your workflows do with your account.
 - [ ] Chrome Web Store listing.
 - [ ] Hardened **LinkedIn MCP** server (localhost, token-gated, per-tool scopes,
       rate limiting, audit log) so AI agents can drive LinkedIn safely.
-- [ ] Higher-level LinkedIn convenience commands.
+- [x] Side panel UI + manual mode.
+- [x] Built-in LinkedIn extractors (profile / company people / posts / comments / jobs).
+- [ ] Port the guest-endpoint single-job extractor (needs a browser-side rewrite).
 
 ## License
 
