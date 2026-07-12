@@ -87,6 +87,37 @@ body.sidepanel .card { padding: 12px 14px; }
 }
 .chip.bad { color: var(--danger); border-color: var(--danger); }
 .result pre { max-height: 340px; overflow: auto; }
+
+/* Cron builder */
+.builder {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.row2 { display: flex; gap: 8px; }
+.row2 > label { flex: 1; }
+.days { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.daychip {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 0; padding: 3px 8px;
+  border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; cursor: pointer; user-select: none;
+}
+.daychip input { width: auto; margin: 0; }
+.daychip span { margin: 0; font-weight: 500; }
+.daypresets { display: flex; gap: 6px; flex-wrap: wrap; }
+button.small { padding: 3px 10px; font-size: 12px; }
+
+/* Status */
+.statusbox { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.statusbox .k { display: inline-block; min-width: 78px; color: var(--muted); }
+.statusbox b.on { color: var(--ok); }
+.statusbox b.off { color: var(--muted); }
+.statusbox .err { color: var(--danger); }
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .row { display: flex; gap: 8px; }
 .row > input { flex: 1; }
 button {

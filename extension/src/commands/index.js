@@ -11,7 +11,7 @@ import * as extract from './extract.js';
 import * as evaluate from './evaluate.js';
 import * as screenshot from './screenshot.js';
 import * as cookies from './cookies.js';
-import * as linkedin from './linkedin.js';
+import * as social from './social.js';
 
 const handlers = {
   // Built-in
@@ -70,9 +70,10 @@ const handlers = {
   set_cookies:   cookies.set_cookies,
   clear_cookies: cookies.clear_cookies,
 
-  // LinkedIn high-level extraction
-  linkedin_extract:      linkedin.linkedin_extract,
-  list_linkedin_skills:  linkedin.list_linkedin_skills,
+  // Social-media high-level extraction
+  social_extract:      social.social_extract,
+  list_social_skills:  social.list_social_skills,
+  linkedin_extract:    social.linkedin_extract, // backwards-compatible alias
 };
 
 export async function dispatch(type, params) {

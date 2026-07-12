@@ -1,38 +1,40 @@
-// High-level LinkedIn extraction command.
+// High-level social-media extraction command.
 //
 // Runs the generic pipeline (open → wait → scroll → evaluate → close) using an
-// extractor from src/linkedin/. Works both from n8n tasks
-// (`{ type: 'linkedin_extract', params: { url } }`) and from the side panel's
-// manual mode.
+// extractor from src/extractors/<platform>/. Works both from automation tasks
+// (`{ type: 'social_extract', params: { url } }`) and from the side panel's
+// manual mode. Currently ships LinkedIn extractors; more platforms plug into
+// src/extractors/index.js as they land.
 
 import { open_tab, close_tab } from './tab.js';
 import { wait_for_selector } from './navigation.js';
 import { scroll as scrollCmd } from './scroll.js';
 import { evaluate_js } from './evaluate.js';
-import { resolveSkill, listSkills } from '../linkedin/index.js';
+import { resolveSkill, listSkills } from '../extractors/index.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function list_linkedin_skills() {
+export function list_social_skills() {
   return { skills: listSkills() };
 }
 
 /**
  * @param {object} params
- * @param {string} params.url             LinkedIn URL to extract from
- * @param {string} [params.kind]          Force an extractor ('profile', 'peopleCompany', 'posts', 'comments', 'jobs')
+ * @param {string} params.url             Social-media URL to extract from
+ * @param {string} [params.kind]          Force an extractor: full ID ('linkedin.profile') or bare type ('profile')
+ * @param {string} [params.platform]      Optional platform hint when `kind` is a bare type
  * @param {boolean} [params.active=false] Open the tab in the foreground (nice for manual runs)
  * @param {boolean} [params.keepTab=false] Leave the tab open after extraction
  * @param {number} [params.timeoutMs=45000]
  */
-export async function linkedin_extract({ url, kind, active = false, keepTab = false, timeoutMs = 45_000 } = {}) {
-  if (!url) { const e = new Error('linkedin_extract: `url` is required'); e.code = 'BAD_PARAMS'; throw e; }
+export async function social_extract({ url, kind, platform, active = false, keepTab = false, timeoutMs = 45_000 } = {}) {
+  if (!url) { const e = new Error('social_extract: `url` is required'); e.code = 'BAD_PARAMS'; throw e; }
 
-  const skill = resolveSkill({ url, kind });
+  const skill = resolveSkill({ url, kind, platform });
   if (!skill) {
     const e = new Error(kind
-      ? `linkedin_extract: unknown kind "${kind}"`
-      : `linkedin_extract: no extractor matches ${url}`);
+      ? `social_extract: unknown kind "${kind}"`
+      : `social_extract: no extractor matches ${url}`);
     e.code = 'NO_SKILL'; throw e;
   }
 
@@ -69,7 +71,7 @@ export async function linkedin_extract({ url, kind, active = false, keepTab = fa
       onStep('wait_predicate', {});
     }
 
-    // Scroll pass (never scroll back to top — LinkedIn virtualizes sections).
+    // Scroll pass (never scroll back to top — feeds/profiles virtualize sections).
     const s = (typeof skill.pickScroll === 'function' ? skill.pickScroll(targetUrl) : null)
       || skill.SCROLL
       || { strategy: 'window', steps: [20, 40, 60, 80, 100], delayMs: 1500 };
@@ -107,3 +109,6 @@ export async function linkedin_extract({ url, kind, active = false, keepTab = fa
     }
   }
 }
+
+// Backwards-compatible alias.
+export const linkedin_extract = social_extract;

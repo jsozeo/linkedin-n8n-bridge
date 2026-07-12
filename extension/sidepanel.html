@@ -2,31 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>LinkedIn Bridge for n8n</title>
+  <title>Social Media Bridge for n8n</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body class="sidepanel">
   <main>
     <header>
-      <h1>LinkedIn Bridge for n8n</h1>
-      <p class="sub">Drive LinkedIn from n8n on a schedule — or run a single action manually below.</p>
+      <h1>Social Media Bridge for n8n</h1>
+      <p class="sub">Connect your social accounts to your automations — scheduled or on demand.</p>
     </header>
 
     <section class="card accent">
       <h2>Manual run</h2>
       <label>
-        <span>LinkedIn URL</span>
+        <span>Page URL</span>
         <input id="manualUrl" type="url" autocomplete="off" placeholder="https://www.linkedin.com/in/…" />
       </label>
       <label>
         <span>Action</span>
         <select id="manualAction">
           <option value="auto">Auto-detect from URL (recommended)</option>
-          <option value="profile">Profile → structured data</option>
-          <option value="peopleCompany">Company → info + people</option>
-          <option value="posts">Posts feed → list</option>
-          <option value="comments">Post → post + comments</option>
-          <option value="jobs">Jobs → list</option>
+          <optgroup label="LinkedIn">
+            <option value="linkedin.profile">Profile → structured data</option>
+            <option value="linkedin.peopleCompany">Company → info + people</option>
+            <option value="linkedin.posts">Posts feed → list</option>
+            <option value="linkedin.comments">Post → post + comments</option>
+            <option value="linkedin.jobs">Jobs → list</option>
+          </optgroup>
           <option value="open">Just open the page</option>
         </select>
       </label>
@@ -47,12 +49,12 @@
     <section class="card">
       <h2>Connection</h2>
       <label>
-        <span>n8n poll webhook URL <em>(GET)</em></span>
-        <input id="pollUrl" type="url" autocomplete="off" placeholder="https://your-n8n/webhook/linkedin-bridge-poll" />
+        <span>Automation poll webhook URL <em>(GET)</em></span>
+        <input id="pollUrl" type="url" autocomplete="off" placeholder="https://your-tool/webhook/social-bridge-poll" />
       </label>
       <label>
-        <span>n8n result webhook URL <em>(optional, POST)</em></span>
-        <input id="resultUrl" type="url" autocomplete="off" placeholder="https://your-n8n/webhook/linkedin-bridge-result" />
+        <span>Automation result webhook URL <em>(optional, POST)</em></span>
+        <input id="resultUrl" type="url" autocomplete="off" placeholder="https://your-tool/webhook/social-bridge-result" />
       </label>
       <label>
         <span>Shared token</span>
@@ -70,23 +72,60 @@
         <input id="enabled" type="checkbox" />
         <span>Enable the scheduler</span>
       </label>
+
       <label>
-        <span>Preset</span>
+        <span>Quick preset</span>
         <select id="preset">
-          <option value="">Custom…</option>
-          <option value="*/5 * * * *">Every 5 minutes</option>
-          <option value="*/15 * * * *">Every 15 minutes</option>
-          <option value="*/30 * * * *">Every 30 minutes</option>
-          <option value="0 * * * *">Every hour</option>
-          <option value="0 */2 * * *">Every 2 hours</option>
-          <option value="0 9 * * *">Every day at 09:00</option>
+          <option value="">Custom (use the builder below)</option>
+          <option value="*/15 9-18 * * 1-5">Every 15 min · 9–18h · weekdays</option>
+          <option value="*/30 8-20 * * 1-5">Every 30 min · 8–20h · weekdays</option>
+          <option value="0 9-18 * * 1-5">Hourly · 9–18h · weekdays</option>
+          <option value="*/15 * * * *">Every 15 min · 24/7</option>
           <option value="0 9 * * 1-5">Weekdays at 09:00</option>
-          <option value="0 9,17 * * 1-5">Weekdays at 09:00 &amp; 17:00</option>
+          <option value="0 9 * * *">Every day at 09:00</option>
         </select>
       </label>
+
+      <div class="builder">
+        <label>
+          <span>Run</span>
+          <select id="bFreq">
+            <option value="5">every 5 minutes</option>
+            <option value="10">every 10 minutes</option>
+            <option value="15">every 15 minutes</option>
+            <option value="30">every 30 minutes</option>
+            <option value="60">once per hour (at :00)</option>
+            <option value="once">once per day (at start hour)</option>
+          </select>
+        </label>
+        <div class="row2">
+          <label><span>From hour</span><select id="bFrom"></select></label>
+          <label><span>To hour</span><select id="bTo"></select></label>
+        </div>
+        <label class="inline">
+          <input id="bAllDay" type="checkbox" />
+          <span>All day (any hour)</span>
+        </label>
+        <label><span>On days</span></label>
+        <div class="days" id="bDays">
+          <label class="daychip"><input type="checkbox" value="1"><span>Mon</span></label>
+          <label class="daychip"><input type="checkbox" value="2"><span>Tue</span></label>
+          <label class="daychip"><input type="checkbox" value="3"><span>Wed</span></label>
+          <label class="daychip"><input type="checkbox" value="4"><span>Thu</span></label>
+          <label class="daychip"><input type="checkbox" value="5"><span>Fri</span></label>
+          <label class="daychip"><input type="checkbox" value="6"><span>Sat</span></label>
+          <label class="daychip"><input type="checkbox" value="0"><span>Sun</span></label>
+        </div>
+        <div class="daypresets">
+          <button type="button" class="ghost small" data-days="1,2,3,4,5">Weekdays</button>
+          <button type="button" class="ghost small" data-days="6,0">Weekend</button>
+          <button type="button" class="ghost small" data-days="all">Every day</button>
+        </div>
+      </div>
+
       <label>
-        <span>Cron expression <em>(5 fields, local time)</em></span>
-        <input id="cron" type="text" autocomplete="off" placeholder="*/15 * * * *" />
+        <span>Cron expression <em>(advanced — 5 fields, local time)</em></span>
+        <input id="cron" type="text" autocomplete="off" placeholder="*/15 9-18 * * 1-5" />
       </label>
       <p id="cronInfo" class="hint"></p>
     </section>
@@ -100,6 +139,11 @@
           <button id="regenClientId" class="ghost" type="button">Regen</button>
         </div>
       </label>
+      <p class="hint">
+        A random ID for <strong>this browser</strong>, sent as <code>clientId</code> with every request.
+        It lets one workflow serve several browsers — e.g. route tasks to a specific machine, or tell
+        results apart. If you only use one browser you can ignore it. It is not a secret.
+      </p>
     </section>
 
     <section class="actions">
@@ -111,7 +155,11 @@
 
     <section class="card subtle">
       <h2>Status</h2>
-      <pre id="diagnostics">loading…</pre>
+      <div id="statusSummary" class="statusbox">loading…</div>
+      <details>
+        <summary>Raw storage</summary>
+        <pre id="diagnostics"></pre>
+      </details>
     </section>
   </main>
   <script src="sidepanel.js" type="module"></script>

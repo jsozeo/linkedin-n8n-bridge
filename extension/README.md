@@ -1,8 +1,9 @@
-# LinkedIn Bridge for n8n — Extension
+# Social Media Bridge for n8n — Extension
 
-Unpacked Manifest V3 extension. A cron-scheduled service worker polls your n8n
-instance for tasks and executes them in your browser via the Chrome DevTools
-Protocol (`chrome.debugger`), so events have `isTrusted: true`.
+Unpacked Manifest V3 extension. A cron-scheduled service worker polls your
+automation tool (n8n / Make / Zapier / self-hosted) for tasks and executes them
+in your browser via the Chrome DevTools Protocol (`chrome.debugger`), so events
+have `isTrusted: true`.
 
 ## Install & configure
 
@@ -79,26 +80,29 @@ secret.
 ### Cookies (`src/commands/cookies.js`)
 `get_cookies`, `set_cookies`, `clear_cookies`.
 
-### LinkedIn extraction (`src/commands/linkedin.js`)
+### Social extraction (`src/commands/social.js`)
 | Command | Params | Returns |
 |---|---|---|
-| `linkedin_extract` | `{ url, kind?, active?, keepTab?, timeoutMs? }` | `{ skillId, url, targetUrl, durationMs, result, steps }` |
-| `list_linkedin_skills` | — | `{ skills: [{ id, kind, pattern }] }` |
+| `social_extract` | `{ url, kind?, platform?, active?, keepTab?, timeoutMs? }` | `{ skillId, url, targetUrl, durationMs, result, steps }` |
+| `list_social_skills` | — | `{ skills: [{ id, platform, kind, pattern }] }` |
+| `linkedin_extract` | alias of `social_extract` | — |
 
-`linkedin_extract` runs the full pipeline (open → wait → scroll → evaluate →
+`social_extract` runs the full pipeline (open → wait → scroll → evaluate →
 close) with a DOM extractor auto-detected from the URL, or forced via `kind`
-(`profile`, `peopleCompany`, `posts`, `comments`, `jobs`). Set `active: true` to
-watch the tab (used by the side panel's manual mode); leave it `false` for
-background scheduled runs. The extractors live in
-[`src/linkedin/`](./src/linkedin/) and lean on stable anchors (`componentkey`,
-`aria-label`, heading text, href patterns) instead of hashed CSS classes.
+(full id like `linkedin.profile`, or a bare type). Set `active: true` to watch
+the tab (used by the side panel's manual mode); leave it `false` for background
+scheduled runs. Extractors live in [`src/extractors/<platform>/`](./src/extractors/)
+and lean on stable anchors (`componentkey`, `aria-label`, heading text, href
+patterns) instead of hashed CSS classes. New platforms register in
+[`src/extractors/index.js`](./src/extractors/index.js).
 
 ## UI: side panel
 
 [`sidepanel.html`](./sidepanel.html) / [`sidepanel.js`](./sidepanel.js) is the
 extension's home (opened by clicking the toolbar icon, and also registered as
-the options page). It holds the settings form and a **Manual run** section that
-fires a single `linkedin_extract` (or `open_tab`) against a URL and shows the
+the options page). It holds the settings form, a **cron builder** (days / hour
+range / frequency), a live **Status** block, and a **Manual run** section that
+fires a single `social_extract` (or `open_tab`) against a URL and shows the
 pipeline steps + structured result inline.
 
 ## Architecture notes

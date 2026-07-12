@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "LinkedIn Bridge for n8n",
+  "name": "Social Media Bridge for n8n",
   "version": "1.0.0",
-  "description": "Connect your logged-in LinkedIn session to n8n. Runs browser actions on a schedule you control (cron).",
+  "description": "Connect your social media accounts to your automation tools — on a schedule or on demand.",
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
@@ -15,7 +15,19 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "LinkedIn Bridge for n8n"
+    "default_title": "Social Media Bridge for n8n",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   },
   "permissions": [
     "debugger",
@@ -28,7 +40,15 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "https://*.linkedin.com/*"
+    "https://*.linkedin.com/*",
+    "https://*.instagram.com/*",
+    "https://*.facebook.com/*",
+    "https://*.pinterest.com/*",
+    "https://*.youtube.com/*",
+    "https://*.x.com/*",
+    "https://*.twitter.com/*",
+    "https://*.tiktok.com/*",
+    "https://*.threads.net/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
