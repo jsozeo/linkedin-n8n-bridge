@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Bridge for n8n",
+  "version": "1.0.0",
+  "description": "Connect your logged-in LinkedIn session to n8n. Runs browser actions on a schedule you control (cron).",
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "LinkedIn Bridge for n8n"
+  },
+  "permissions": [
+    "debugger",
+    "tabs",
+    "storage",
+    "alarms",
+    "scripting",
+    "cookies",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
+}

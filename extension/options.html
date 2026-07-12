@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LinkedIn Bridge for n8n — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>LinkedIn Bridge for n8n</h1>
+      <p class="sub">Runs browser actions from your n8n workflows on a schedule you control. Your LinkedIn session stays in this browser — only your own n8n instance is contacted.</p>
+    </header>
+
+    <section class="card">
+      <h2>Connection</h2>
+      <label>
+        <span>n8n poll webhook URL <em>(required — polled on your schedule; must accept GET)</em></span>
+        <input id="pollUrl" type="url" autocomplete="off" placeholder="https://your-n8n.example.com/webhook/linkedin-bridge-poll" />
+      </label>
+      <label>
+        <span>n8n result webhook URL <em>(optional — receives task results via POST)</em></span>
+        <input id="resultUrl" type="url" autocomplete="off" placeholder="https://your-n8n.example.com/webhook/linkedin-bridge-result" />
+      </label>
+      <label>
+        <span>Shared token <em>(set the same value on the n8n side)</em></span>
+        <input id="token" type="password" autocomplete="off" placeholder="a long random secret…" />
+      </label>
+      <p class="hint">
+        <button id="genToken" class="link" type="button">generate</button> ·
+        <button id="toggleTokenVis" class="link" type="button">show / hide</button>
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Schedule</h2>
+      <label class="inline">
+        <input id="enabled" type="checkbox" />
+        <span>Enable the scheduler</span>
+      </label>
+      <label>
+        <span>Preset</span>
+        <select id="preset">
+          <option value="">Custom…</option>
+          <option value="*/5 * * * *">Every 5 minutes</option>
+          <option value="*/15 * * * *">Every 15 minutes</option>
+          <option value="*/30 * * * *">Every 30 minutes</option>
+          <option value="0 * * * *">Every hour</option>
+          <option value="0 */2 * * *">Every 2 hours</option>
+          <option value="0 9 * * *">Every day at 09:00</option>
+          <option value="0 9 * * 1-5">Weekdays at 09:00</option>
+          <option value="0 9,17 * * 1-5">Weekdays at 09:00 &amp; 17:00</option>
+        </select>
+      </label>
+      <label>
+        <span>Cron expression <em>(5 fields, local time)</em></span>
+        <input id="cron" type="text" autocomplete="off" placeholder="*/15 * * * *" />
+      </label>
+      <p id="cronInfo" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>Identity</h2>
+      <label>
+        <span>Client ID <em>(identifies this browser to your workflow)</em></span>
+        <div class="row">
+          <input id="clientId" type="text" autocomplete="off" placeholder="auto-generated…" />
+          <button id="regenClientId" class="ghost" type="button">Regenerate</button>
+        </div>
+      </label>
+    </section>
+
+    <section class="actions">
+      <button id="save" class="primary" type="button">Save</button>
+      <button id="runNow" class="ghost" type="button">Run now</button>
+      <button id="reload" class="ghost" type="button">Reload</button>
+      <button id="clear" class="danger" type="button">Clear all</button>
+      <span id="status" class="status"></span>
+    </section>
+
+    <section class="card subtle">
+      <h2>Status</h2>
+      <pre id="diagnostics">loading…</pre>
+    </section>
+  </main>
+  <script src="options.js" type="module"></script>
+</body>
+</html>

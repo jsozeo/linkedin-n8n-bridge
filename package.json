@@ -1,0 +1,12 @@
+{
+  "name": "linkedin-n8n-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that connects your logged-in LinkedIn session to n8n, running browser actions on a schedule you control (cron).",
+  "type": "module",
+  "scripts": {
+    "zip": "cd extension && zip -r -FS ../extension.zip . -x '*.DS_Store' && cd .. && echo 'Wrote extension.zip'"
+  },
+  "keywords": ["chrome-extension", "linkedin", "n8n", "automation", "cron", "mv3"],
+  "license": "MIT"
+}
