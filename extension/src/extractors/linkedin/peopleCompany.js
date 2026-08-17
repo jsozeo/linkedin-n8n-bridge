@@ -53,22 +53,57 @@ export const EXTRACT_JS = evalAsyncScript(`
   const findShowMore = () => Array.from(document.querySelectorAll('button'))
     .find((b) => SHOW_MORE_RE.test((b.textContent || '').trim()) && !b.disabled);
   const countCards = () => document.querySelectorAll('main a[href*="/in/"]').length;
-  let stale = 0, attempts = 0;
-  while (attempts < 20 && stale < 3) {
-    const prev = countCards();
-    const btn = findShowMore();
-    if (!btn) break;
+
+  // The /people/ tab is NOT infinite scroll — it paginates via a "Show more
+  // results" button at the BOTTOM of the <main> scroll container. LinkedIn only
+  // renders/enables that button once you've scrolled main to the bottom, so we
+  // must scroll main first each round, then click.
+  const findScroller = () => {
+    let el = $1('main');
+    let guard = 0;
+    while (el && guard++ < 30) {
+      const cs = getComputedStyle(el);
+      if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 8) return el;
+      el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+  const scroller = findScroller();
+  const isDoc = scroller === document.scrollingElement || scroller === document.documentElement || scroller === document.body;
+  const scrollToBottom = () => {
     try {
-      btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-      btn.click();
-    } catch (_) { break; }
-    await sleep(1800);
+      if (isDoc) window.scrollTo(0, document.body.scrollHeight);
+      else scroller.scrollTop = scroller.scrollHeight;
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }));
+    } catch (e) {}
+  };
+
+  // HARD wall-clock budget. The whole extract MUST finish well under the MV3
+  // service-worker lifetime (~30s of activity) or Chrome kills the worker mid
+  // run and no capture is ever posted. We therefore cap the "show more" loop at
+  // ~15s — enough to page in the first few hundred people for validation; the
+  // production run can raise this once SW keep-alive is in place.
+  const DEADLINE = Date.now() + 15000;
+  let stale = 0, attempts = 0;
+  while (Date.now() < DEADLINE && stale < 3) {
+    const prev = countCards();
+    scrollToBottom();
+    await sleep(700);
+    const btn = findShowMore();
+    if (btn) {
+      try {
+        btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+        btn.click();
+      } catch (_) {}
+      await sleep(1000);
+    } else {
+      await sleep(500);
+    }
     const next = countCards();
     if (next <= prev) stale++; else stale = 0;
     attempts++;
   }
-  // Final settle once the click loop ends.
-  await sleep(500);
+  await sleep(300);
 
   // ── Company top card ─────────────────────────────────────────────────────
   // 2026 layout: the legacy class names (.org-top-card-*) are gone in the

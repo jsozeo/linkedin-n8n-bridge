@@ -168,7 +168,7 @@ async function loadIntoForm() {
   $('pollUrl').value = cfg.n8n?.pollUrl || '';
   $('resultUrl').value = cfg.n8n?.resultUrl || '';
   $('enabled').checked = Boolean(cfg.schedule?.enabled);
-  setCronField(cfg.schedule?.cron || '*/15 9-18 * * 1-5', { reflect: true });
+  setCronField(cfg.schedule?.cron || '* * * * *', { reflect: true });
   await renderDiagnostics();
   await renderStatus();
 }

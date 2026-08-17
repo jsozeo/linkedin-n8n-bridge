@@ -12,11 +12,15 @@
 //     },
 //     schedule: {
 //       enabled: true,
-//       cron:    '*/15 * * * *'   // standard 5-field cron, evaluated in local time
+//       cron:    '* * * * *'   // standard 5-field cron, evaluated in local time.
+//                              // Poll frequently: the n8n side (Feeder) governs
+//                              // actual scraping pace (active hours, 1h gap,
+//                              // jitter, daily caps), so the extension only asks
+//                              // "any job?" and executes what it's handed.
 //     }
 //   }
 
-export const DEFAULT_CRON = '*/15 * * * *';
+export const DEFAULT_CRON = '* * * * *';
 
 export async function loadConfig() {
   const cfg = await chrome.storage.local.get(['token', 'clientId', 'n8n', 'schedule']);

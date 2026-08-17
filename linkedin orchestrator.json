@@ -1,0 +1,226 @@
+{
+  "name": "linkedin orchestrator",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-280, -220],
+      "id": "a1111111-1111-4111-8111-111111111111",
+      "name": "Seed examples"
+    },
+    {
+      "parameters": {
+        "jsCode": "const store=$getWorkflowStaticData('global'); store.queue=store.queue||[]; const uuid=()=>'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&0x3|0x8)).toString(16);}); const kinds=[{url:'https://www.linkedin.com/in/williamhgates/',kind:'linkedin.profile'},{url:'https://www.linkedin.com/company/microsoft/people/',kind:'linkedin.peopleCompany'},{url:'https://www.linkedin.com/company/microsoft/posts/',kind:'linkedin.posts'},{url:'https://www.linkedin.com/jobs/search/?keywords=growth',kind:'linkedin.jobs'},{url:'https://www.linkedin.com/feed/update/urn:li:activity:7000000000000000000/',kind:'linkedin.comments'}]; const jobs=kinds.map(k=>({taskId:uuid(),type:'social_extract',params:{url:k.url,kind:k.kind}})); store.queue.push(...jobs); return [{json:{enqueued:jobs.length,queueLength:store.queue.length,jobs}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-60, -220],
+      "id": "a2222222-2222-4222-8222-222222222222",
+      "name": "Enqueue all kinds"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "GET-ORCHESTRATED",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, -16],
+      "id": "04f4f259-fc28-4e5d-8c3c-247f186c304d",
+      "name": "GET ORCHESTRATOR",
+      "webhookId": "e24d4ece-df8e-4f56-a585-6371724c1b8c",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "zf93ZPbTgi1B2b0E",
+          "name": "AI media bridge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const store=$getWorkflowStaticData('global'); const queue=Array.isArray(store.queue)?store.queue:[]; const batch=queue.splice(0,10); store.queue=queue; return [{json:{tasks:batch,remaining:queue.length}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, -16],
+      "id": "a3333333-3333-4333-8333-333333333333",
+      "name": "Drain queue"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "POST-ORCHESTRATOR-RESULT",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 240],
+      "id": "549c5ca3-7a74-4349-891a-54c61ed9e65a",
+      "name": "POST OCHRESTRATOR RESULT",
+      "webhookId": "4873c9d6-4316-4e4e-973d-1d395ef44bb3",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "zf93ZPbTgi1B2b0E",
+          "name": "AI media bridge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  { "id": "c1111111-1111-4111-8111-111111111111", "leftValue": "={{ $json.body.data.skillId }}", "rightValue": "linkedin.profile", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "profile"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  { "id": "c2222222-2222-4222-8222-222222222222", "leftValue": "={{ $json.body.data.skillId }}", "rightValue": "linkedin.peopleCompany", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "company people"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  { "id": "c3333333-3333-4333-8333-333333333333", "leftValue": "={{ $json.body.data.skillId }}", "rightValue": "linkedin.posts", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "posts"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  { "id": "c4444444-4444-4444-8444-444444444444", "leftValue": "={{ $json.body.data.skillId }}", "rightValue": "linkedin.jobs", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "jobs"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  { "id": "c5555555-5555-4555-8555-555555555555", "leftValue": "={{ $json.body.data.skillId }}", "rightValue": "linkedin.comments", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "comments"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [240, 240],
+      "id": "a5555555-5555-4555-8555-555555555555",
+      "name": "Route by kind"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 20],
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "name": "Handle: profile"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 120],
+      "id": "b2222222-2222-4222-8222-222222222222",
+      "name": "Handle: company people"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 220],
+      "id": "b3333333-3333-4333-8333-333333333333",
+      "name": "Handle: posts"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 320],
+      "id": "b4444444-4444-4444-8444-444444444444",
+      "name": "Handle: jobs"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 420],
+      "id": "b5555555-5555-4555-8555-555555555555",
+      "name": "Handle: comments"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 520],
+      "id": "b6666666-6666-4666-8666-666666666666",
+      "name": "Handle: unknown"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Seed examples": {
+      "main": [[{ "node": "Enqueue all kinds", "type": "main", "index": 0 }]]
+    },
+    "GET ORCHESTRATOR": {
+      "main": [[{ "node": "Drain queue", "type": "main", "index": 0 }]]
+    },
+    "POST OCHRESTRATOR RESULT": {
+      "main": [[{ "node": "Route by kind", "type": "main", "index": 0 }]]
+    },
+    "Route by kind": {
+      "main": [
+        [{ "node": "Handle: profile", "type": "main", "index": 0 }],
+        [{ "node": "Handle: company people", "type": "main", "index": 0 }],
+        [{ "node": "Handle: posts", "type": "main", "index": 0 }],
+        [{ "node": "Handle: jobs", "type": "main", "index": 0 }],
+        [{ "node": "Handle: comments", "type": "main", "index": 0 }],
+        [{ "node": "Handle: unknown", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7f11a255-cf06-406d-a793-6819a2a48b16",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2fbd191e892efe54ca1ce7702c296223793cfa458480de9c158d309cdeb66376"
+  },
+  "id": "glff1mdIo2uujHU6",
+  "tags": []
+}

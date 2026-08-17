@@ -19,8 +19,16 @@ export const URL_PATTERN = /linkedin\.com\/(in\/[^/]+\/recent-activity\/(all|sha
 // `[data-testid="mainFeed"]` is the stable feed container on web LinkedIn 2026.
 export const WAIT_SELECTORS = ['main', '[data-testid="mainFeed"]'];
 
-// Infinite scroll. 20% increments with 2.5 s pauses give the network time to paginate.
-export const SCROLL = { strategy: 'window', steps: [20, 40, 60, 80, 100], delayMs: 2500 };
+// Infinite/virtualized list: scroll to the bottom repeatedly, extracting and
+// merging after each scroll (LinkedIn recycles off-screen cards). The runner
+// stops once no new posts appear for `stableRounds` rounds or after `maxSteps`.
+// maxSteps/delay are an upper bound; the runner also enforces a wall-clock
+// budget (budgetMs) so the loop always finishes before the MV3 service worker
+// is torn down (~30s) — otherwise no capture is posted on high-volume feeds.
+export const SCROLL = { strategy: 'infinite', maxSteps: 15, delayMs: 1400, stableRounds: 3, budgetMs: 22000 };
+
+// Field the runner merges/dedupes across scroll rounds.
+export const ITEMS_KEY = 'posts';
 
 export const EXTRACT_JS = evalScript(`
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -48,7 +56,7 @@ export const EXTRACT_JS = evalScript(`
   };
 
   // Extract the LinkedIn activity URN from anywhere in a string ("urn:li:activity:…").
-  const URN_RE = /urn:li:activity:(\\d+)/i;
+  const URN_RE = /urn:li:(?:activity|ugcPost):(\\d+)/i;
   const findUrnIn = (s) => (s && URN_RE.exec(s)) ? URN_RE.exec(s)[1] : null;
 
   // ── Anchor each post card ────────────────────────────────────────────────
@@ -60,15 +68,19 @@ export const EXTRACT_JS = evalScript(`
   const posts = [];
 
   for (const anchor of anchors) {
-    // Walk up to the card root: smallest ancestor that contains both the
-    // anchor and the post body / reactions widget.
-    let card = anchor;
-    for (let i = 0; i < 10 && card.parentElement; i++) {
-      card = card.parentElement;
-      if (card === feed || card === document.body) break;
-      const hasBody  = $1('[data-testid="expandable-text-box"]', card);
-      const hasReact = $1('[aria-label="Open reactions menu"]', card);
-      if (hasBody && hasReact) break;
+    // Card root. The legacy Ember feed (company /posts/, some locales) wraps each
+    // post in .feed-shared-update-v2 — use it directly. Otherwise (new SDUI feed)
+    // walk up to the smallest ancestor holding the body + reactions widget.
+    let card = anchor.closest('.feed-shared-update-v2, [data-urn^="urn:li:activity"]');
+    if (!card) {
+      card = anchor;
+      for (let i = 0; i < 10 && card.parentElement; i++) {
+        card = card.parentElement;
+        if (card === feed || card === document.body) break;
+        const hasBody  = $1('[data-testid="expandable-text-box"]', card);
+        const hasReact = $1('[aria-label="Open reactions menu"]', card);
+        if (hasBody && hasReact) break;
+      }
     }
     if (seen.has(card)) continue;
     seen.add(card);
@@ -109,33 +121,76 @@ export const EXTRACT_JS = evalScript(`
     }
 
     // ── Post body ─────────────────────────────────────────────────────────
-    const textContent = (txtOf('[data-testid="expandable-text-box"]', card) || '').slice(0, 8000) || null;
+    // New feed: [data-testid="expandable-text-box"]. Legacy Ember feed:
+    // .update-components-text (inside .feed-shared-inline-show-more-text).
+    const textContent = (
+      txtOf('[data-testid="expandable-text-box"]', card)
+      || txtOf('.update-components-text', card)
+      || txtOf('.feed-shared-inline-show-more-text', card)
+      || ''
+    ).slice(0, 8000) || null;
 
-    // ── URN / canonical post URL ──────────────────────────────────────────
-    // The activity URN appears in: the anchor's data-urn, the card's
-    // data-id, or any inner anchor that points to /feed/update/urn:li:activity:.
-    let urn = findUrnIn(attr(anchor, 'data-urn'))
-           || findUrnIn(attr(card, 'data-urn'))
-           || findUrnIn(attr(card, 'data-id'));
-    if (!urn) {
-      // Scan child anchors as a last resort.
-      const u = $$('a[href]', card).map((a) => a.getAttribute('href') || '').find((h) => URN_RE.test(h));
-      if (u) urn = findUrnIn(u);
+    // ── Card text (used for the text-based fallbacks below) ───────────────
+    const cardText = card.innerText || '';
+
+    // ── Canonical post URL ────────────────────────────────────────────────
+    // On search-result cards there is no data-urn and no /feed/update anchor.
+    // The only reliable URN source is the componentkey wrapping the post body,
+    // which encodes it as ...ContentUrnUgcPostUrn(...userGeneratedContentId=<id>)
+    // or ...ContentUrnShareUrn(...shareId=<id>). Any of ugcPost/share/activity
+    // resolves as a /feed/update/ permalink.
+    const ckUrn = (() => {
+      const els = $$('[componentkey*="ContentId="], [componentkey*="shareId="], [componentkey*="activityId="]', card);
+      for (const el of els) {
+        const ck = el.getAttribute('componentkey') || '';
+        let m = ck.match(/userGeneratedContentId=(\\d+)/); if (m) return 'urn:li:ugcPost:' + m[1];
+        m = ck.match(/activityId=(\\d+)/);                 if (m) return 'urn:li:activity:' + m[1];
+        m = ck.match(/shareId=(\\d+)/);                    if (m) return 'urn:li:share:' + m[1];
+      }
+      return null;
+    })();
+
+    let postUrl = ($$('a[href*="/feed/update/urn:li:"]', card).map((a) => a.href).find(Boolean)) || null;
+    if (postUrl) postUrl = postUrl.split('?')[0];
+    if (!postUrl && ckUrn) postUrl = 'https://www.linkedin.com/feed/update/' + ckUrn + '/';
+    if (!postUrl) {
+      let urn = findUrnIn(attr(anchor, 'data-urn'))
+             || findUrnIn(attr(card, 'data-urn'))
+             || findUrnIn(attr(card, 'data-id'));
+      if (!urn) {
+        const u = $$('a[href]', card).map((a) => a.getAttribute('href') || '').find((h) => URN_RE.test(h));
+        if (u) urn = findUrnIn(u);
+      }
+      if (urn) postUrl = 'https://www.linkedin.com/feed/update/urn:li:activity:' + urn + '/';
     }
-    const postUrl = urn ? 'https://www.linkedin.com/feed/update/urn:li:activity:' + urn + '/' : null;
+
+    // LinkedIn snowflake IDs encode creation time in the high bits
+    // (id >> 22 = epoch-ms) — exact, unlike the relative "1m" label.
+    let postEpochMsFromId = null;
+    const idFromUrn = (postUrl || ckUrn || '').match(/(\\d{15,})/);
+    if (idFromUrn) {
+      try { const ms = Number(BigInt(idFromUrn[1]) >> 22n); if (ms > 1e12 && ms < 4e12) postEpochMsFromId = ms; } catch (e) {}
+    }
 
     // ── Timestamp ─────────────────────────────────────────────────────────
     const headerText = headerParent ? (headerParent.innerText || '').split(/\\r?\\n/).map((s) => s.trim()) : [];
-    const postDate = headerText.find((s) => /^\\d+\\s?(s|m|h|d|w|mo|y|min|hour|day|week|month|year)/i.test(s)) || null;
-    const postEpochMs = parsePostEpochMs(postDate);
+    let postDate = headerText.find((s) => /^\\d+\\s?(s|m|h|d|w|mo|y|min|hour|day|week|month|year)/i.test(s)) || null;
+    // Search cards don't put the time in the header — fall back to the compact
+    // token ("74d", "3h") found anywhere in the card.
+    if (!postDate) { const tm = cardText.match(/\\b(\\d+)(s|m|h|d|w|mo|y)\\b/); if (tm) postDate = tm[0]; }
+    const postEpochMs = postEpochMsFromId != null ? postEpochMsFromId : parsePostEpochMs(postDate);
 
-    // ── Reactions / comments / reposts (parsed numbers) ───────────────────
+    // ── Reactions / comments / reposts ────────────────────────────────────
+    // The feed exposes counts in aria-labels; search cards expose them only as
+    // visible text ("2 comments"). Requiring a leading digit avoids matching
+    // body copy like "drop a comment".
     const reactionsLabel = attr($1('[aria-label*=" reaction"]', card), 'aria-label');
     const commentsLabel  = attr($1('[aria-label*=" comment"], [aria-label*=" commentaire"]', card), 'aria-label');
     const repostsLabel   = attr($1('[aria-label*=" repost"]', card), 'aria-label');
-    const reactionCount  = parseCount(reactionsLabel);
-    const commentCount   = parseCount(commentsLabel);
-    const repostCount    = parseCount(repostsLabel);
+    const countFromText  = (re) => { const m = cardText.match(re); return m ? (parseInt(m[1].replace(/[.,]/g, ''), 10) || 0) : 0; };
+    const reactionCount  = parseCount(reactionsLabel) || countFromText(/(\\d[\\d.,]*)\\s+reactions?/i);
+    const commentCount   = parseCount(commentsLabel)  || countFromText(/(\\d[\\d.,]*)\\s+comments?/i);
+    const repostCount    = parseCount(repostsLabel)   || countFromText(/(\\d[\\d.,]*)\\s+reposts?/i);
 
     // ── Repost / promoted flags ───────────────────────────────────────────
     const isRepost = /\\b(reposted this|a republi[ée] ceci|shared a post|a partag[ée] une publication)\\b/i.test(card.innerText || '');
@@ -199,10 +254,80 @@ export const EXTRACT_JS = evalScript(`
     });
   }
 
+  // Diagnostic probe — only when we found nothing, so we can see *why*
+  // (wrong container, different DOM on /search/, or an auth wall).
+  const _debug = posts.length ? undefined : {
+    href:            location.href,
+    title:           document.title,
+    hasMainFeed:     !!$1('[data-testid="mainFeed"]'),
+    hasMain:         !!$1('main'),
+    controlMenuEN:   $$('[aria-label^="Open control menu for post by "]').length,
+    controlMenuAny:  $$('[aria-label*="control menu" i]').length,
+    expandableText:  $$('[data-testid="expandable-text-box"]').length,
+    urnEls:          $$('[data-urn*="urn:li:activity"]').length,
+    urnAnchors:      $$('a[href*="urn:li:activity"]').length,
+    viewNameEls:     $$('[data-view-name]').length,
+    looksLikeAuthwall: /\\/(login|authwall|checkpoint)/i.test(location.href) || /sign in|log in|s.identifier/i.test((document.title || '')),
+    bodyTextLen:     (document.body && document.body.innerText || '').length,
+  };
+
+  // ── Drive the real scroll container ──────────────────────────────────────
+  // LinkedIn's content search scrolls <main> (an overflow:auto element), NOT
+  // the window. social.js's window scroll is a no-op here, so the extractor
+  // advances the container itself: each round we step down ~one viewport and
+  // fire a scroll event; the runner's inter-round delay lets the LazyColumn
+  // fetch + render the next batch, which the next round extracts and merges.
+  const findScroller = () => {
+    let el = feed;
+    let guard = 0;
+    while (el && guard++ < 30) {
+      const cs = getComputedStyle(el);
+      if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 8) return el;
+      el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+  const _scroller = findScroller();
+  const _isDocScroller = _scroller === document.scrollingElement || _scroller === document.documentElement || _scroller === document.body;
+  let _scrollInfo = null;
+  try {
+    const viewport = _isDocScroller ? window.innerHeight : _scroller.clientHeight;
+    const before = _isDocScroller ? window.scrollY : _scroller.scrollTop;
+    // ~1.6 viewports/round: fewer rounds to reach the end (bundled maxSteps=25)
+    // while staying under LinkedIn's render buffer so no card is skipped.
+    const step = Math.round(viewport * 1.6);
+    if (_isDocScroller) window.scrollBy(0, step);
+    else _scroller.scrollTop = Math.min(_scroller.scrollHeight, _scroller.scrollTop + step);
+    try { _scroller.dispatchEvent(new Event('scroll', { bubbles: true })); } catch (e) {}
+    const after = _isDocScroller ? window.scrollY : _scroller.scrollTop;
+    _scrollInfo = { before, after, step, moved: after - before };
+  } catch (e) { _scrollInfo = { error: String(e) }; }
+
+  // ── Scroll diagnostics (survives the merge — see social.js) ──────────────
+  const _probe = (() => {
+    try {
+      return {
+        cards: anchors.length,
+        scroller: {
+          tag: _scroller.tagName,
+          testid: _scroller.getAttribute && _scroller.getAttribute('data-testid'),
+          isDoc: _isDocScroller,
+          sh: _scroller.scrollHeight, ch: _scroller.clientHeight, top: _scroller.scrollTop,
+        },
+        scrollInfo: _scrollInfo,
+        hasLazyColumn: !!$1('[data-testid="lazy-column"]'),
+        loaders: $$('[data-testid="loader"]').length,
+        endMarker: /no more results|end of results|you.?re all caught up|plus de r[eé]sultats/i.test((feed.innerText || '')),
+      };
+    } catch (e) { return { probeError: String(e) }; }
+  })();
+
   return {
     url:    location.href,
     title:  document.title,
     count:  posts.length,
     posts,
+    _debug,
+    _probe,
   };
 `);

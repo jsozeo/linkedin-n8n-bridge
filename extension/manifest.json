@@ -40,6 +40,7 @@
     "sidePanel"
   ],
   "host_permissions": [
+    "https://api2.ozeo.io/*",
     "https://*.linkedin.com/*",
     "https://*.instagram.com/*",
     "https://*.facebook.com/*",

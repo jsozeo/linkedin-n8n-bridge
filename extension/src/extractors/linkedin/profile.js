@@ -90,7 +90,52 @@ export const EXTRACT_JS = evalScript(`
     }
     return null;
   };
+  // ── 2026 SDUI resolver (server-driven UI) ────────────────────────────────
+  // The redesigned profile renders each section as a card whose componentkey
+  // ends with a stable suffix, e.g.
+  //   com.linkedin.sdui.profile.card.ref<URN>...ExperienceTopLevelSection
+  // The visible "Experience" heading text ALSO appears inside an empty
+  // ProfileNullStateCardAnchor_Experience placeholder, so a heading-text walk
+  // wrongly resolves to that anchor (→ 0 entries). We therefore match the SDUI
+  // card by componentkey suffix first, skipping anchor/null-state elements, and
+  // pick the richest (longest innerText) match — that's the card holding the
+  // entity-collection-item entries.
+  const SDUI_MAP = [
+    [/experience|expérience/i,        'ExperienceTopLevelSection'],
+    [/education|formation/i,          'EducationTopLevelSection'],
+    [/skills|compétences|competences/i, 'Skills'],
+    [/licen|certificat/i,             'CertificationTopLevel'],
+    [/languages|langues/i,            'LanguageTopLevel'],
+    [/recommendation|recommandation/i,'RecommendationsTopLevel'],
+    [/activity|activité|activite/i,   'Activity'],
+    [/about|infos|propos/i,           'About'],
+    [/featured|sélection|selection|une/i, 'Featured'],
+    [/publication/i,                  'PublicationTopLevelSection'],
+    [/courses|cours/i,                'CourseTopLevelSection'],
+    [/honor|distinction/i,            'HonorsTopLevel'],
+    [/volunteer|bénévol|benevol/i,    'VolunteerExperienceTopLevel'],
+    [/project|projet/i,               'Projects'],
+  ];
+  const sduiSuffixFor = (labels) => {
+    for (const [re, suf] of SDUI_MAP) if (labels.some((l) => re.test(l))) return suf;
+    return null;
+  };
+  const getSduiCard = (suffix) => {
+    let best = null, bestLen = -1;
+    const re = new RegExp(suffix + '$', 'i');
+    for (const el of root.querySelectorAll('[componentkey]')) {
+      const ck = el.getAttribute('componentkey') || '';
+      if (/anchor|nullstate/i.test(ck)) continue;
+      if (!re.test(ck)) continue;
+      const len = (el.innerText || '').length;
+      if (len > bestLen) { bestLen = len; best = el; }
+    }
+    return best;
+  };
+
   const getSection = (...labels) => {
+    const suf = sduiSuffixFor(labels);
+    if (suf) { const card = getSduiCard(suf); if (card) return card; }
     for (const label of labels) {
       const lc = label.toLowerCase();
       for (const el of root.querySelectorAll('section')) {
@@ -131,11 +176,20 @@ export const EXTRACT_JS = evalScript(`
   //   1) [componentkey*="entity-collection-item"]    (most stable)
   //   2) top-level <li>                              (LinkedIn's classic list)
   //   3) heuristic: text blocks containing a date    (last resort)
+  const UUID_CK_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const findEntryBlocks = (section) => {
     if (!section) return [];
-    const byKey = Array.from(section.querySelectorAll('div[componentkey]'))
-      .filter((el) => (el.getAttribute('componentkey') || '').includes('entity-collection-item'));
-    if (byKey.length) return byKey;
+    // 2026 SDUI: each entry is a child element keyed either by an
+    // entity-collection-item hash (Experience) or a bare UUID componentkey
+    // (Education, Certifications, …). Skip anchor/null-state placeholders, then
+    // keep only the outermost candidates (drop entries nested inside another).
+    const candidates = Array.from(section.querySelectorAll('[componentkey]')).filter((el) => {
+      const ck = el.getAttribute('componentkey') || '';
+      if (/anchor|nullstate/i.test(ck)) return false;
+      return ck.includes('entity-collection-item') || UUID_CK_RE.test(ck);
+    });
+    const outermost = candidates.filter((el) => !candidates.some((o) => o !== el && o.contains(el)));
+    if (outermost.length) return outermost;
     const topLis = Array.from(section.querySelectorAll('li'))
       .filter((el) => !el.parentElement || !el.parentElement.closest('li'));
     if (topLis.length) return topLis;
@@ -354,8 +408,9 @@ export const EXTRACT_JS = evalScript(`
     const seenEdu = new Set();
     findEntryBlocks(eduSection).forEach((block) => {
       const texts = getTexts(block);
-      if (texts.length < 2) return;
       const schoolLink = block.querySelector('a[href*="/school/"]');
+      // Keep degree-less entries (school name only) as long as we can name the school.
+      if (texts.length < 2 && !schoolLink && !texts.length) return;
       const schoolLabel = schoolLink ? (schoolLink.getAttribute('aria-label') || '').trim() : '';
       const ecole = schoolLabel || texts[0];
       let diplome = '', annees = '', activites = '';

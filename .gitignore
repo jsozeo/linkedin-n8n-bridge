@@ -5,3 +5,10 @@ node_modules/
 .idea/
 extension.zip
 dist/
+.env
+.env.*
+client_secret*.json
+*.apps.googleusercontent.com.json
+.cursor/mcp.json
+worker/
+tools/captures/

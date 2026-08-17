@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SM Bridge test orchestrator (extractor auto-heal loop). Not shipped in the extension.
+
+Parameters:
+  Token:  { Type: String, NoEcho: true }
+  Bucket: { Type: String }
+  JobUrl: { Type: String }
+
+Resources:
+  Fn:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sm-bridge-test-orchestrator
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/ozeo-lambda-exec
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          CAPTURE_BUCKET: !Ref Bucket
+          SHARED_TOKEN: !Ref Token
+          JOB_URL: !Ref JobUrl
+          JOB_KIND: linkedin.posts
+      Code:
+        ZipFile: |
+          const {S3Client,PutObjectCommand}=require('@aws-sdk/client-s3');
+          const s3=new S3Client({});
+          const B=process.env.CAPTURE_BUCKET,T=process.env.SHARED_TOKEN||'';
+          const U=process.env.JOB_URL,K=process.env.JOB_KIND||'linkedin.posts';
+          const J=(s,o)=>({statusCode:s,headers:{'content-type':'application/json'},body:JSON.stringify(o)});
+          const put=(k,b,c)=>s3.send(new PutObjectCommand({Bucket:B,Key:k,Body:b,ContentType:c}));
+          exports.handler=async(e)=>{
+            const m=(e&&e.requestContext&&e.requestContext.http&&e.requestContext.http.method)||'GET';
+            const h=(e&&e.headers)||{};const a=h.authorization||h.Authorization||'';
+            if(T&&a!==('Bearer '+T))return J(401,{error:'unauthorized'});
+            if(m==='GET'){const id=(globalThis.crypto&&globalThis.crypto.randomUUID&&globalThis.crypto.randomUUID())||('t_'+Date.now());
+              return J(200,{tasks:[{taskId:id,type:'social_extract',params:{url:U,kind:K,active:true,captureHtml:true}}]});}
+            if(m==='POST'){let b={};try{const r=e.isBase64Encoded?Buffer.from(e.body,'base64').toString('utf8'):e.body;b=JSON.parse(r||'{}');}catch(x){b={};}
+              const id=b.taskId||'no-task';const ts=new Date().toISOString().replace(/[:.]/g,'-');const base='runs/'+ts+'__'+id;
+              const html=b.html||(b.data&&b.data.html)||'';const meta=Object.assign({},b);delete meta.html;
+              if(meta.data){meta.data=Object.assign({},meta.data);delete meta.data.html;meta.data.htmlBytes=html.length;}
+              const ms=JSON.stringify(meta,null,2);
+              await put(base+'.json',ms,'application/json');await put('latest.json',ms,'application/json');
+              if(html){await put(base+'.html',html,'text/html; charset=utf-8');await put('latest.html',html,'text/html; charset=utf-8');}
+              return J(200,{ok:true,stored:base,htmlBytes:html.length});}
+            return J(405,{error:'method '+m});
+          };
+
+  Url:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref Fn
+      AuthType: NONE
+
+  Perm:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Fn
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+Outputs:
+  FunctionUrl:
+    Value: !GetAtt Url.FunctionUrl

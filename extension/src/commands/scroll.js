@@ -34,6 +34,17 @@ export async function scroll({ tabId, percent, durationMs = 1000, selector = nul
         return JSON.stringify({ found: true, scrolled: 0, target, sh, ch, sy });
       }
 
+      // Background / hidden tabs freeze requestAnimationFrame — the animation
+      // below would never advance (and its await would hang the whole step).
+      // Jump straight to the target and fire a scroll event so lazy-loaders
+      // (IntersectionObserver, scroll listeners) still paginate.
+      if (document.visibilityState === 'hidden' || document.hidden) {
+        if (isWindow) window.scrollTo(0, target); else el.scrollTop = target;
+        try { (isWindow ? window : el).dispatchEvent(new Event('scroll', { bubbles: true })); } catch (e) {}
+        const finalYh = isWindow ? window.scrollY : el.scrollTop;
+        return JSON.stringify({ found: true, scrolled: finalYh - sy, target, sh, ch, sy, hidden: true });
+      }
+
       const durationMs = ${durationMs};
       const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
       const t0 = performance.now();
