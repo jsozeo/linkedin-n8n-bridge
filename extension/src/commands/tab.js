@@ -6,6 +6,22 @@
 //     about:blank to the target.
 
 /**
+ * Pick a window to host the new tab. A service worker has no "current window",
+ * so chrome.tabs.create() throws `No current window` whenever the browser holds
+ * no open window at all — which is what an unattended machine looks like after
+ * a Chrome auto-update. Reuse any normal window, else open one unfocused.
+ */
+async function resolveWindowId(explicit) {
+  if (typeof explicit === 'number') return explicit;
+  try {
+    const wins = await chrome.windows.getAll({ windowTypes: ['normal'] });
+    if (wins.length) return wins[0].id;
+  } catch { /* no window list available — fall through and create one */ }
+  const created = await chrome.windows.create({ focused: false });
+  return created.id;
+}
+
+/**
  * Open a new tab. `waitUntil`:
  *   - 'load' (default) → chrome.tabs status === 'complete' (= window.load).
  *   - 'domcontentloaded' → main-frame DCL via chrome.webNavigation. Use this
@@ -18,13 +34,15 @@ export async function open_tab({ url, active = true, windowId, waitUntil = 'load
     const err = new Error('open_tab: `url` is required'); err.code = 'BAD_PARAMS'; throw err;
   }
 
+  const hostWindowId = await resolveWindowId(windowId);
+
   if (waitUntil === 'domcontentloaded') {
     // Arm the listener BEFORE creating the tab so a very-fast (cached) load
     // can't fire DCL before we're listening.
     let resolveFn, rejectFn, listener, timer;
     const dclP = new Promise((resolve, reject) => { resolveFn = resolve; rejectFn = reject; });
     const created = await new Promise((resolve, reject) => {
-      chrome.tabs.create({ url, active, ...(windowId ? { windowId } : {}) })
+      chrome.tabs.create({ url, active, windowId: hostWindowId })
         .then(resolve).catch(reject);
     });
     listener = (details) => {
@@ -53,7 +71,7 @@ export async function open_tab({ url, active = true, windowId, waitUntil = 'load
     return { tabId: t.id, windowId: t.windowId, url: t.url, title: t.title, active: t.active };
   }
 
-  const created = await chrome.tabs.create({ url, active, ...(windowId ? { windowId } : {}) });
+  const created = await chrome.tabs.create({ url, active, windowId: hostWindowId });
 
   if (waitUntil === 'load') {
     await new Promise((resolve, reject) => {
