@@ -204,10 +204,42 @@ export const EXTRACT_JS = evalScript(`
                          new URLSearchParams(location.search).get('location') || null;
   const resultsHeader = txtOf('main h1') || txtOf('main h2');
 
+  // When items is empty the result is indistinguishable from "no jobs posted
+  // today", so report where the anchors actually are. Everything above hangs
+  // off 'main a[href*="/jobs/view/"]'; if LinkedIn moves the list out of <main>
+  // or stops using /jobs/view/ hrefs, each count below localises the break.
+  const docLinks = $$('a[href*="/jobs/view/"]').length;
+  const currentJobIdLinks = $$('a[href*="currentJobId"]').length;
+  const mainEl = $1('main');
+  let bestUlCount = 0;
+  for (const ul of $$('main ul')) {
+    const n = ul.querySelectorAll('a[href*="/jobs/view/"]').length;
+    if (n > bestUlCount) bestUlCount = n;
+  }
+  const hrefSample = $$('a')
+    .map((a) => a.getAttribute('href'))
+    .filter((h) => h && h.indexOf('/jobs/') !== -1)
+    .slice(0, 10);
+
   return {
     // Wrap so the worker can POST directly without restructuring.
     jobsCount:    items.length,
     payload:      items,
+
+    _probe: {
+      mainLinks:        allLinks.length,
+      docLinks,
+      currentJobIdLinks,
+      bestUlCount,
+      cardsGrouped:     byId.size,
+      mainPresent:      !!mainEl,
+      mainTextLength:   mainEl ? (mainEl.innerText || '').length : 0,
+      mainTextHead:     mainEl ? (mainEl.innerText || '').slice(0, 400) : null,
+      liInMain:         $$('main li').length,
+      iframes:          $$('iframe').length,
+      hrefSample,
+      paneMarked:       !!$1('[data-bridge-scroll-pane="1"]'),
+    },
 
     // Diagnostics
     url:          location.href,
