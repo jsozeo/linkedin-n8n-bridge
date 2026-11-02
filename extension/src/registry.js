@@ -146,7 +146,14 @@ export async function resolveEntry({ url = null, pageType = null, locale = null 
  * caller reports rather than judges.
  */
 export function sel(entry, path) {
-  const found = String(path).split('.').reduce((o, k) => (o == null ? o : o[k]), entry?.actions);
+  // Called with one argument this used to return [] and the action failed much
+  // later as "no candidates", which reads like a stale registry rather than a
+  // bug. Refuse the call instead.
+  if (!entry || typeof entry !== 'object' || !('actions' in entry)) {
+    throw new Error(`sel() needs a registry entry as its first argument, got ${typeof entry}`);
+  }
+  if (!path) throw new Error('sel() needs a dotted path as its second argument');
+  const found = String(path).split('.').reduce((o, k) => (o == null ? o : o[k]), entry.actions);
   if (typeof found === 'string') return [found];
   return Array.isArray(found) ? found : [];
 }

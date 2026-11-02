@@ -294,7 +294,7 @@ function notFound(what, where) {
 // ---------------------------------------------------------------------------
 
 async function doLike(tabId, step, entry, { path, scope, scopeMatch, exclude, unlike, dryRun, what }) {
-  const cands = await sel(path);
+  const cands = sel(entry, path);
   const unreacted = sel(entry, 'reaction.unreactedLabel');
   const where = { scope, scopeMatch, exclude };
   const t = await locate(tabId, cands, where);
@@ -380,7 +380,7 @@ async function expandReplies(tabId, step, entry, parentUrn) {
 // ---------------------------------------------------------------------------
 
 async function writeComment(tabId, step, entry, { openPath, scope, scopeMatch, exclude, text, dryRun, what }) {
-  const opener = await locate(tabId, await sel(openPath), { scope, scopeMatch, exclude });
+  const opener = await locate(tabId, sel(entry, openPath), { scope, scopeMatch, exclude });
   if (opener.error) notFound(what, opener.error);
   await humanClick(tabId, opener);
   step('composer_open', { selector: opener.selector });

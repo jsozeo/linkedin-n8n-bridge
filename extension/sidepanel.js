@@ -189,8 +189,8 @@ async function loadIntoForm() {
   $('clientId').value = cfg.clientId || '';
   $('pollUrl').value = cfg.n8n?.pollUrl || '';
   $('resultUrl').value = cfg.n8n?.resultUrl || '';
-  $('registryUrl').value = cfg.selectorsUrl || '';
-  $('registryWriteToken').value = cfg.selectorsWriteToken || '';
+  $('registryUrl').value = cfg.registryUrl || '';
+  $('registryWriteToken').value = cfg.registryWriteToken || '';
   await renderSelectorsState();
   $('enabled').checked = Boolean(cfg.schedule?.enabled);
   setCronField(cfg.schedule?.cron || '* * * * *', { reflect: true });
@@ -203,7 +203,7 @@ function collect() {
     token: $('token').value.trim(),
     clientId: $('clientId').value.trim() || crypto.randomUUID(),
     n8n: {
-      pollUrl: $('pollUrl').value.trim(),
+      pollUrl: $('pollUrl').value.trim() || undefined,
       resultUrl: $('resultUrl').value.trim() || undefined,
     },
     schedule: { enabled: $('enabled').checked, cron: $('cron').value.trim() || '*/15 9-18 * * 1-5' },
@@ -216,7 +216,6 @@ function collect() {
 // automation host configured — so it saves without going through validate().
 async function saveSelectors() {
   const v = {
-    n8n: { pollUrl: '', resultUrl: '' },
     registryUrl: $('registryUrl').value.trim(),
     registryWriteToken: $('registryWriteToken').value.trim(),
   };
@@ -236,12 +235,13 @@ async function saveSelectors() {
     cmd: 'manual-run',
     type: 'selectors_set_url',
     params: {
-      url: v.selectorsUrl || null,
-      writeUrl: v.selectorsWriteUrl || null,
-      writeToken: v.selectorsWriteToken || null,
+      url: v.registryUrl || null,
+      writeToken: v.registryWriteToken || null,
     },
   });
-  if (res?.ok) setStatus($('status'), v.selectorsUrl ? 'Registry fetched ✓' : 'Using the bundled selectors.', 'ok');
+  if (res?.ok) {
+    setStatus($('status'), v.registryUrl ? 'Custom registry reached ✓' : 'Built-in registry reached ✓', 'ok');
+  }
   else setStatus($('status'), 'Registry: ' + (res?.error?.message || 'failed'), 'err');
   await renderSelectorsState();
 }
@@ -267,20 +267,20 @@ async function renderSelectorsState() {
 function validate(v) {
   const errs = [];
   if (!v.token || v.token.length < 16) errs.push('token (≥16 chars)');
-  if (!/^https?:\/\/.+/.test(v.n8n.pollUrl)) errs.push('poll URL');
+  if (v.n8n.pollUrl && !/^https?:\/\/.+/.test(v.n8n.pollUrl)) errs.push('poll URL');
   if (v.n8n.resultUrl && !/^https?:\/\/.+/.test(v.n8n.resultUrl)) errs.push('result URL');
-  if (v.selectorsUrl && !/^https?:\/\/.+/.test(v.selectorsUrl)) errs.push('registry URL');
-  if (v.selectorsWriteUrl && !/^https?:\/\/.+/.test(v.selectorsWriteUrl)) errs.push('registry publish URL');
+  if (v.registryUrl && !/^https?:\/\/.+/.test(v.registryUrl)) errs.push('registry URL');
   if (!validateCron(v.schedule.cron).valid) errs.push('cron expression');
   return errs;
 }
 
 async function ensureHostPermissions(v) {
+  // Built-in endpoints are already in host_permissions; only an override can
+  // introduce an origin Chrome has not granted yet.
   const origins = [...new Set([
-    originPattern(v.n8n.pollUrl),
-    v.n8n.resultUrl && originPattern(v.n8n.resultUrl),
-    v.selectorsUrl && originPattern(v.selectorsUrl),
-    v.selectorsWriteUrl && originPattern(v.selectorsWriteUrl),
+    v.n8n?.pollUrl && originPattern(v.n8n.pollUrl),
+    v.n8n?.resultUrl && originPattern(v.n8n.resultUrl),
+    v.registryUrl && originPattern(v.registryUrl),
   ].filter(Boolean))];
   if (!origins.length) return true;
   if (await chrome.permissions.contains({ origins })) return true;
