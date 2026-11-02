@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Social Media Bridge for n8n",
-  "version": "1.1.0",
-  "version_name": "1.1.0 · 2026-11-02 15:46 · from d93b553",
+  "version": "1.1.1",
+  "version_name": "1.1.1 · 2026-11-02 16:21 · from 00dcf87",
   "description": "Connect your social media accounts to your automation tools — on a schedule or on demand.",
   "background": {
     "service_worker": "src/background.js",
