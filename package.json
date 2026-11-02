@@ -5,7 +5,8 @@
   "description": "Chrome extension that connects your logged-in social media sessions to your automation tools (n8n, Make, Zapier, self-hosted), on a schedule you control (cron) or on demand.",
   "type": "module",
   "scripts": {
-    "zip": "cd extension && zip -r -FS ../extension.zip . -x '*.DS_Store' && cd .. && echo 'Wrote extension.zip'"
+    "zip": "node tools/stamp-version.mjs --same && cd extension && zip -r -FS ../extension.zip . -x '*.DS_Store' && cd .. && echo 'Wrote extension.zip'",
+    "stamp": "node tools/stamp-version.mjs"
   },
   "keywords": [
     "chrome-extension",
