@@ -58,6 +58,34 @@ function matchesAny(url, patterns) {
   });
 }
 
+/**
+ * An entry matches a URL either through its glob patterns or through the exact
+ * regex the bundled extractor used. Keeping the regex means the move to the
+ * cloud cannot change which page resolves to which extractor.
+ */
+function entryMatchesUrl(entry, url) {
+  if (matchesAny(url, entry.url_patterns)) return true;
+  if (entry.url_regex) {
+    try { return new RegExp(entry.url_regex, 'i').test(url); } catch { return false; }
+  }
+  return false;
+}
+
+/**
+ * Exact locale first, then an entry that declares itself locale-independent.
+ * The extractors match headings by accent-stripped text and genuinely behave
+ * the same in every interface language, so forcing a copy per locale would
+ * create duplicates that always drift apart. `any` is a declaration in the
+ * document, never a silent guess.
+ */
+const LOCALE_ANY = 'any';
+
+function pickByLocale(entries, locale) {
+  return entries.find((e) => e.ui_locale === locale)
+      || entries.find((e) => e.ui_locale === LOCALE_ANY)
+      || null;
+}
+
 function newVersion() {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
   const rand = Math.random().toString(36).slice(2, 8);
@@ -103,16 +131,24 @@ async function rebuildIndex(s3, bucket, { tenant, platform }) {
       entries.push({
         tenant: doc.tenant, platform: doc.platform,
         page_type: doc.page_type, ui_locale: doc.ui_locale,
+        priority: Number.isFinite(doc.priority) ? doc.priority : 999,
         version: doc.version, published_at: doc.published_at,
         url_patterns: doc.url_patterns || [],
+        url_regex: doc.extractor?.url_regex || null,
         field_count: (doc.fields || []).length,
         action_count: Object.keys(doc.actions || {}).length,
+        has_extractor: Boolean(doc.extractor?.extract_js),
+        extract_js_bytes: doc.extractor?.extract_js?.length || 0,
+        step_keys: doc.extractor?.step_keys || [],
       });
     }
     token = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (token);
 
-  entries.sort((a, b) => `${a.page_type}/${a.ui_locale}`.localeCompare(`${b.page_type}/${b.ui_locale}`));
+  // Resolution order, not display order: overlapping URL patterns are settled
+  // by priority exactly as the bundle settled them by declaration order.
+  entries.sort((a, b) => (a.priority - b.priority)
+    || `${a.page_type}/${a.ui_locale}`.localeCompare(`${b.page_type}/${b.ui_locale}`));
   await writeJson(s3, bucket, indexKey({ tenant, platform }), { updated_at: new Date().toISOString(), entries });
   return entries;
 }
@@ -137,9 +173,43 @@ function shapeErrors(doc) {
     if (!f?.name) errs.push('every field needs a name');
     if (!f?.selector) errs.push(`field "${f?.name || '?'}" needs a selector`);
   }
-  const js = JSON.stringify(doc);
-  if (/"\s*javascript:|<script\b/i.test(js)) errs.push('the document must not carry script payloads');
+
+  const x = doc.extractor;
+  if (x !== undefined && x !== null) {
+    if (typeof x !== 'object' || Array.isArray(x)) {
+      errs.push('extractor must be an object');
+    } else {
+      if (!x.extract_js || typeof x.extract_js !== 'string') errs.push('extractor.extract_js must be a non-empty string');
+      if (x.url_regex && !regexCompiles(x.url_regex)) errs.push(`extractor.url_regex does not compile: ${x.url_regex}`);
+      if (x.wait_selectors && !Array.isArray(x.wait_selectors)) errs.push('extractor.wait_selectors must be an array');
+      if (x.step_keys && !Array.isArray(x.step_keys)) errs.push('extractor.step_keys must be an array');
+      if (x.scroll && typeof x.scroll !== 'object') errs.push('extractor.scroll must be an object');
+      if (x.normalize_url && !normalizeShapeOk(x.normalize_url)) errs.push('extractor.normalize_url is malformed');
+      for (const rule of x.scroll_rules || []) {
+        if (!rule?.when_url_matches || !regexCompiles(rule.when_url_matches)) {
+          errs.push('every scroll_rules entry needs a compilable when_url_matches');
+        }
+      }
+    }
+  }
   return errs;
+}
+
+function regexCompiles(source) {
+  try { new RegExp(source); return true; } catch { return false; }
+}
+
+/**
+ * The seven normalizeUrl() functions in the bundle are all "match a path, write
+ * another path, maybe set a query param", so they survive the move as data.
+ */
+function normalizeShapeOk(n) {
+  if (typeof n !== 'object' || Array.isArray(n)) return false;
+  if (n.replace_with) return typeof n.replace_with === 'string';
+  if (!n.match || !regexCompiles(n.match)) return false;
+  if (typeof n.pathname !== 'string') return false;
+  if (n.search_params && (typeof n.search_params !== 'object' || Array.isArray(n.search_params))) return false;
+  return true;
 }
 
 // --- routes -----------------------------------------------------------------
@@ -182,31 +252,43 @@ export async function registryRoute({ s3, bucket, method, path, qs, body, author
     const locale = qs.locale;
     if (!locale) return json(400, { error: 'locale is required — read it from the page, not from the browser' });
 
+    const idx = await readJson(s3, bucket, indexKey({ tenant, platform }));
+    const known = idx?.entries || [];
     let pageType = qs.page_type;
-    if (!pageType) {
+    let resolvedLocale = locale;
+
+    if (pageType) {
+      const hit = pickByLocale(known.filter((e) => e.page_type === pageType), locale);
+      if (hit) resolvedLocale = hit.ui_locale;
+    } else {
       if (!qs.url) return json(400, { error: 'pass either page_type or url' });
-      const idx = await readJson(s3, bucket, indexKey({ tenant, platform }));
-      const hit = (idx?.entries || []).find(
-        (e) => e.ui_locale === locale && matchesAny(qs.url, e.url_patterns),
-      );
+      // The index is already in priority order, so the first URL match wins
+      // the same tie the bundle used to win.
+      const candidates = known.filter((e) => entryMatchesUrl(e, qs.url));
+      const hit = pickByLocale(candidates, locale);
       if (!hit) {
         return json(404, {
           error: 'no registry entry matches this URL in this locale',
           url: qs.url, ui_locale: locale,
-          known: (idx?.entries || []).map((e) => `${e.page_type}/${e.ui_locale}`),
+          known: known.map((e) => `${e.page_type}/${e.ui_locale}`),
         }, NO_STORE);
       }
       pageType = hit.page_type;
+      resolvedLocale = hit.ui_locale;
     }
 
-    const doc = await readJson(s3, bucket, `${entryPrefix({ tenant, platform, pageType, locale })}/published.json`);
+    const doc = await readJson(
+      s3, bucket,
+      `${entryPrefix({ tenant, platform, pageType, locale: resolvedLocale })}/published.json`,
+    );
     if (!doc) {
       return json(404, {
         error: 'no published entry for this key',
         key: { tenant, platform, page_type: pageType, ui_locale: locale },
+        known: known.map((e) => `${e.page_type}/${e.ui_locale}`),
       }, NO_STORE);
     }
-    return json(200, doc, NO_STORE);
+    return json(200, { ...doc, requested_locale: locale }, NO_STORE);
   }
 
   if (method === 'POST' && clean.endsWith('/registry/entry')) {
@@ -230,9 +312,11 @@ export async function registryRoute({ s3, bucket, method, path, qs, body, author
       updated_at: now,
       published_at: now,
       previous_version: previous?.version || null,
+      priority: Number.isFinite(body.priority) ? body.priority : (previous?.priority ?? 999),
       url_patterns: body.url_patterns || previous?.url_patterns || [],
       fields: body.fields || [],
       actions: body.actions || {},
+      extractor: body.extractor || null,
       note: body.note || null,
     };
 
