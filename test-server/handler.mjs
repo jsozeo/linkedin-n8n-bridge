@@ -15,6 +15,7 @@
 
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { gunzipSync } from 'node:zlib';
+import { registryRoute } from './registry.mjs';
 
 const s3 = new S3Client({});
 const BUCKET = process.env.CAPTURE_BUCKET;
@@ -54,9 +55,20 @@ export const handler = async (event) => {
   const host = headers.host || headers.Host || '';
   const qs = event?.queryStringParameters || {};
 
-  // Selector registry. Public for the same reason as /extractor: it is DOM
-  // trivia, not a secret, and the extension fetches it on every cycle so a
-  // LinkedIn redesign is fixed by `push-selectors.sh`, never by a reload.
+  // Keyed selector registry. Reads are public for the same reason as
+  // /extractor: DOM trivia, not secrets, fetched on every job. Writes carry the
+  // token, which is why the flag is passed in rather than enforced here.
+  const authorized = !TOKEN || (headers.authorization || headers.Authorization || '') === `Bearer ${TOKEN}`;
+  const registryResponse = await registryRoute({
+    s3, bucket: BUCKET, method,
+    path, qs,
+    body: method === 'POST' ? parseBody(event) : null,
+    authorized,
+  });
+  if (registryResponse) return registryResponse;
+
+  // LEGACY single-document registry, kept alive until the extension has fully
+  // moved to the keyed one above. Removed at the end of this phase.
   if (method === 'GET' && path.replace(/\/+$/, '').endsWith('/selectors')) {
     const doc = await getObjectText('selectors.json');
     if (doc == null) return json(404, { error: 'no selectors.json in the bucket' });

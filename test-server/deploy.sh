@@ -28,17 +28,21 @@ if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
     --create-bucket-configuration LocationConstraint="$REGION"
 fi
 
-echo "==> Bucket policy (allow $ROLE to Get/PutObject)"
+# ListBucket is on the bucket ARN, not the object ARN, and the registry needs
+# it to enumerate published entries and version history.
+echo "==> Bucket policy (allow $ROLE to Get/Put objects and list the bucket)"
 cat > /tmp/bucketpol.json <<JSON
 { "Version": "2012-10-17", "Statement": [
   { "Effect": "Allow", "Principal": { "AWS": "${ROLE_ARN}" },
-    "Action": ["s3:PutObject","s3:GetObject"], "Resource": "arn:aws:s3:::${BUCKET}/*" } ] }
+    "Action": ["s3:PutObject","s3:GetObject"], "Resource": "arn:aws:s3:::${BUCKET}/*" },
+  { "Effect": "Allow", "Principal": { "AWS": "${ROLE_ARN}" },
+    "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::${BUCKET}" } ] }
 JSON
 aws s3api put-bucket-policy --bucket "$BUCKET" --policy file:///tmp/bucketpol.json
 
 echo "==> Package"
 rm -f /tmp/${FUNC}.zip
-zip -j /tmp/${FUNC}.zip handler.mjs >/dev/null
+zip -j /tmp/${FUNC}.zip handler.mjs registry.mjs >/dev/null
 
 ENV="Variables={CAPTURE_BUCKET=${BUCKET},SHARED_TOKEN=${TOKEN}}"
 
