@@ -76,3 +76,22 @@ return [{ json: {
   params
 }}];
 ```
+
+## Outcome
+
+The write branch was exercised end to end on 2026-11-02 at 17:32 Paris:
+a `write_comment_post` job was served as `linkedin_comment_post`, executed,
+and came back `done` in 16 seconds. The branch is left in place — it is the
+only way to drive a write action without touching the extension by hand.
+
+The temporary probe workflow used to enqueue it (`TEMP schema probe`) has
+been deleted. To enqueue another write action:
+
+```sql
+INSERT INTO jobs (session_id, initiative_id, step_key, url, priority, input_data, status)
+VALUES ('linkedin_1', '<an active initiative uuid>', 'write_comment_post',
+        '<post url>', 1, '{"text": "…", "dryRun": false}'::jsonb, 'pending');
+```
+
+`priority` must satisfy `jobs_priority_check`; 1 is accepted and jumps ahead
+of the extraction backlog, which sits at 3.
