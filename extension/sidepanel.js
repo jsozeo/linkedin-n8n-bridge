@@ -14,6 +14,25 @@ function setStatus(el, msg, kind = '') {
   if (msg && kind) setTimeout(() => { if (el.textContent === msg) { el.textContent = ''; el.className = 'status'; } }, 6000);
 }
 
+// Which build is actually running. version_name is stamped by
+// tools/stamp-version.mjs and carries the commit, so a mismatch with the
+// checkout means Chrome is still serving the previous load.
+function renderBuildStamp() {
+  const el = $('buildStamp');
+  if (!el) return;
+  const m = chrome.runtime.getManifest?.() || {};
+  const stamp = m.version_name || `v${m.version || '?'} · unstamped`;
+  el.textContent = stamp;
+  el.classList.toggle('local', stamp.includes('+local'));
+  el.addEventListener('click', () => {
+    navigator.clipboard.writeText(stamp).then(() => {
+      const was = el.textContent;
+      el.textContent = 'copied';
+      setTimeout(() => { el.textContent = was; }, 1200);
+    }, () => {});
+  });
+}
+
 function originPattern(url) {
   try { const u = new URL(url); return `${u.protocol}//${u.host}/*`; } catch { return null; }
 }
@@ -381,7 +400,12 @@ async function renderDiagnostics() {
   if (typeof masked.nextRunAt === 'number') masked.nextRunAt = new Date(masked.nextRunAt).toLocaleString();
   if (masked.lastRun?.at) masked.lastRun.at = new Date(masked.lastRun.at).toLocaleString();
   const manifest = chrome.runtime.getManifest?.() || {};
-  masked._extension = { name: manifest.name, version: manifest.version, id: chrome.runtime.id };
+  masked._extension = {
+    name: manifest.name,
+    version: manifest.version,
+    build: manifest.version_name || null,
+    id: chrome.runtime.id,
+  };
   $('diagnostics').textContent = JSON.stringify(masked, null, 2);
 }
 
@@ -493,6 +517,7 @@ async function manualRun() {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  renderBuildStamp();
   populateHourSelects();
 
   $('save').addEventListener('click', save);
