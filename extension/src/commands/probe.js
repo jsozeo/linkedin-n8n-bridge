@@ -17,7 +17,7 @@ import { wait_for_selector } from './navigation.js';
 import { mouse_move, mouse_click } from './mouse.js';
 import { type_text, key_press } from './keyboard.js';
 import { evalInPage } from '../cdp.js';
-import { sel, getSelectors, refreshSelectors } from '../selectors.js';
+import { resolveEntry, sel } from '../registry.js';
 
 const jss = (s) => JSON.stringify(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -130,10 +130,10 @@ export async function selectors_probe({
   url, prepare = null, commentUrn = null, path = null, active = true, keepTab = false,
 } = {}) {
   if (!url) { const e = new Error('selectors_probe: url is required'); e.code = 'BAD_PARAMS'; throw e; }
-  await refreshSelectors();
-  const registry = await getSelectors();
+  const entry = await resolveEntry({ url });
   const steps = [];
   const step = (label, info = {}) => steps.push({ label, ...info });
+  step('registry_entry', { page_type: entry.page_type, ui_locale: entry.ui_locale, version: entry.version });
 
   const { tabId } = await open_tab({ url, active, waitUntil: 'domcontentloaded', timeoutMs: 45_000 });
   try {
@@ -143,14 +143,14 @@ export async function selectors_probe({
     let typed = false;
     if (prepare === 'comment' || prepare === 'reply') {
       const opener = prepare === 'reply'
-        ? await sel('linkedin.comment.replyButton')
-        : await sel('linkedin.post.commentButton');
+        ? sel(entry, 'comment.replyButton')
+        : sel(entry, 'post.commentButton');
       const scopeNote = prepare === 'reply' ? { commentUrn } : {};
       const o = await clickBySelector(tabId, opener);
       step('opener', { ...scopeNote, ...(o.error ? { error: o.error } : { label: o.label }) });
       await sleep(1500);
 
-      const box = await clickBySelector(tabId, await sel('linkedin.composer.box'));
+      const box = await clickBySelector(tabId, sel(entry, 'composer.box'));
       if (!box.error) {
         // One character is enough to make LinkedIn render the submit control.
         await type_text({ tabId, text: 'x', delayMs: 60 });
@@ -165,7 +165,7 @@ export async function selectors_probe({
     const helpers = await loadHelpers();
     const report = await evalInPage(tabId, `(() => { ${helpers}
       ${INSPECT_JS}
-      return __ozeoInspect(${jss(registry)}, ${jss(!!prepare)}); })()`);
+      return __ozeoInspect(${jss(entry.actions || {})}, ${jss(!!prepare)}); })()`);
 
     if (typed) {
       // Leave the page as we found it.
@@ -183,7 +183,9 @@ export async function selectors_probe({
       ...report,
       verdict: path ? { [path]: verdict[path] } : verdict,
       summary: {
-        registryVersion: registry.version,
+        registryVersion: entry.version,
+        pageType: entry.page_type,
+        uiLocale: entry.ui_locale,
         pathsChecked: Object.keys(verdict).length,
         pathsMatching: healthy,
         pathsBroken: broken,

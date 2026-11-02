@@ -1,42 +1,36 @@
 // High-level social-media extraction command.
 //
 // Runs the generic pipeline (open → wait → scroll → evaluate → close) using an
-// extractor from src/extractors/<platform>/. Works both from automation tasks
+// extractor fetched from the cloud registry. Works both from automation tasks
 // (`{ type: 'social_extract', params: { url } }`) and from the side panel's
-// manual mode. Currently ships LinkedIn extractors; more platforms plug into
-// src/extractors/index.js as they land.
+// manual mode. The extension ships no extractor of its own: adding a page type
+// is a publish, never a build.
 
 import { open_tab, close_tab } from './tab.js';
 import { wait_for_selector } from './navigation.js';
 import { scroll as scrollCmd } from './scroll.js';
 import { evaluate_js } from './evaluate.js';
-import { resolveSkill, listSkills } from '../extractors/index.js';
+import {
+  resolveEntry, skillFromEntry, detectLocale, pageTypeFromKind, registryStatus,
+} from '../registry.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function list_social_skills() {
-  return { skills: listSkills() };
-}
-
-// DEV auto-heal loop: fetch the extractor body from the test orchestrator so
-// parsers can be fixed remotely (in S3) without reloading the extension. The
-// endpoint returns the exact EXTRACT_JS IIFE string. Falls back to the bundled
-// skill.EXTRACT_JS on any failure. No-op in the public build (no extractorUrl).
-async function resolveExtractJs(skill, extractorUrl, onStep) {
-  if (!extractorUrl) return skill.EXTRACT_JS;
-  try {
-    const res = await fetch(extractorUrl, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    if (text && text.trim().length > 20) {
-      onStep('remote_extractor', { bytes: text.length });
-      return text;
-    }
-    throw new Error('empty body');
-  } catch (e) {
-    onStep('remote_extractor_failed', { message: e.message });
-    return skill.EXTRACT_JS;
-  }
+export async function list_social_skills() {
+  const status = await registryStatus();
+  return {
+    registry: status.url,
+    uiLocale: status.uiLocale,
+    skills: (status.entries || []).map((e) => ({
+      id: `${e.platform}.${e.page_type}`,
+      platform: e.platform,
+      kind: e.page_type,
+      locale: e.ui_locale,
+      version: e.version,
+      pattern: e.url_regex,
+      bytes: e.extract_js_bytes,
+    })),
+  };
 }
 
 // Grab the full page HTML (best effort) for the auto-heal loop.
@@ -142,18 +136,22 @@ async function infiniteScrollExtract({ tabId, skill, s, onStep, extractJs }) {
 export async function social_extract({ url, kind, platform, active = false, keepTab = false, captureHtml = false, extractorUrl = null, timeoutMs = 45_000 } = {}) {
   if (!url) { const e = new Error('social_extract: `url` is required'); e.code = 'BAD_PARAMS'; throw e; }
 
-  const skill = resolveSkill({ url, kind, platform });
-  if (!skill) {
-    const e = new Error(kind
-      ? `social_extract: unknown kind "${kind}"`
-      : `social_extract: no extractor matches ${url}`);
-    e.code = 'NO_SKILL'; throw e;
-  }
-
   const steps = [];
   const onStep = (label, info = {}) => steps.push({ label, ...info, at: Date.now() });
 
-  const targetUrl = (typeof skill.normalizeUrl === 'function') ? skill.normalizeUrl(url) : url;
+  // One GET against the registry. No cache and no bundled copy: if this fails
+  // the job stops, because a half-right selector fails silently and a stopped
+  // job does not.
+  const entry = await resolveEntry({ url, pageType: pageTypeFromKind(kind) });
+  const skill = skillFromEntry(entry, url);
+  onStep('registry_entry', {
+    page_type: entry.page_type,
+    ui_locale: entry.ui_locale,
+    version: entry.version,
+    bytes: skill.EXTRACT_JS.length,
+  });
+
+  const targetUrl = skill.normalizedUrl || url;
   if (targetUrl !== url) onStep('url_normalized', { from: url, to: targetUrl });
 
   const start = Date.now();
@@ -163,6 +161,14 @@ export async function social_extract({ url, kind, platform, active = false, keep
     const opened = await open_tab({ url: targetUrl, active, waitUntil: 'domcontentloaded', timeoutMs });
     tabId = opened.tabId;
     onStep('tab_opened', { tabId });
+
+    // The entry had to be resolved before the tab existed, using the language
+    // seen last time. Re-read it now: it is remembered for the next job, and a
+    // mismatch is reported rather than silently tolerated.
+    const locale = await detectLocale(tabId);
+    if (entry.ui_locale !== 'any' && locale !== entry.ui_locale) {
+      onStep('locale_changed', { page: locale, entry: entry.ui_locale });
+    }
 
     for (const sel of skill.WAIT_SELECTORS || ['body']) {
       try {
@@ -189,11 +195,9 @@ export async function social_extract({ url, kind, platform, active = false, keep
     //     off-screen nodes, so we extract after every scroll and merge —
     //     otherwise the posts at the top are gone from the DOM by the time we
     //     reach the bottom.
-    const s = (typeof skill.pickScroll === 'function' ? skill.pickScroll(targetUrl) : null)
-      || skill.SCROLL
-      || { strategy: 'window', steps: [20, 40, 60, 80, 100], delayMs: 1500 };
+    const s = skill.SCROLL || { strategy: 'window', steps: [20, 40, 60, 80, 100], delayMs: 1500 };
 
-    const extractJs = await resolveExtractJs(skill, extractorUrl, onStep);
+    const extractJs = skill.EXTRACT_JS;
 
     let raw;
     if (s.strategy === 'infinite') {

@@ -7,7 +7,7 @@
 //    the page sees isTrusted events. The existing extractors use .click() for
 //    pagination, which is fine for reading but not for writing.
 // 2. No selector is hardcoded. Everything resolves through the cloud registry
-//    in ../selectors.js, so a LinkedIn DOM change is a JSON push, not a build.
+//    in the cloud registry, so a LinkedIn DOM change is a publish, not a build.
 // 3. Nothing reaches LinkedIn before checkBudget() clears it, and the budget
 //    is consumed only once the action is confirmed in the DOM.
 //
@@ -20,7 +20,7 @@ import { wait_for_selector } from './navigation.js';
 import { mouse_move, mouse_click } from './mouse.js';
 import { type_text } from './keyboard.js';
 import { evalInPage } from '../cdp.js';
-import { sel, refreshSelectors } from '../selectors.js';
+import { resolveEntry, sel } from '../registry.js';
 import { checkBudget, consumeBudget, jitter, sleep } from '../guard.js';
 
 const jss = (s) => JSON.stringify(s);
@@ -196,13 +196,13 @@ function __ozeoFindSubmit(boxCands, submitCands, accessoryCands, scopeSel, scope
   return { error: 'submit_not_found' };
 }`;
 
-async function findSubmit(tabId, { scope = null, scopeMatch = '' } = {}) {
+async function findSubmit(tabId, entry, { scope = null, scopeMatch = '' } = {}) {
   const expr = `(() => { ${LOCATE_JS}
     ${FIND_SUBMIT_JS}
     return __ozeoFindSubmit(
-      ${jss(await sel('linkedin.composer.box'))},
-      ${jss(await sel('linkedin.composer.submit'))},
-      ${jss(await sel('linkedin.composer.accessories'))},
+      ${jss(sel(entry, 'composer.box'))},
+      ${jss(sel(entry, 'composer.submit'))},
+      ${jss(sel(entry, 'composer.accessories'))},
       ${scope ? jss(scope) : 'null'}, ${jss(scopeMatch)});
   })()`;
   return await evalInPage(tabId, expr);
@@ -257,9 +257,13 @@ async function humanType(tabId, text) {
 
 async function onPage(url, { active, keepTab, waitFor }, fn) {
   if (!url) bad('url is required');
-  await refreshSelectors();                      // picks up a selector push without a reload
   const steps = [];
   const step = (label, info = {}) => steps.push({ label, ...info, at: Date.now() });
+
+  // Fetched per action, never cached: a write that fires on a stale selector
+  // is the one mistake worth stopping the whole job for.
+  const entry = await resolveEntry({ url });
+  step('registry_entry', { page_type: entry.page_type, ui_locale: entry.ui_locale, version: entry.version });
 
   const { tabId } = await open_tab({ url, active, waitUntil: 'domcontentloaded', timeoutMs: 45_000 });
   step('tab_open', { tabId, url });
@@ -269,7 +273,7 @@ async function onPage(url, { active, keepTab, waitFor }, fn) {
       catch { step('wait_miss', { selector: s }); }
     }
     await sleep(jitter(1200));                   // let the feed hydrate before touching it
-    const data = await fn(tabId, step);
+    const data = await fn(tabId, step, entry);
     return { ...data, steps };
   } catch (e) {
     e.steps = steps;
@@ -289,9 +293,9 @@ function notFound(what, where) {
 // Likes
 // ---------------------------------------------------------------------------
 
-async function doLike(tabId, step, { path, scope, scopeMatch, exclude, unlike, dryRun, what }) {
+async function doLike(tabId, step, entry, { path, scope, scopeMatch, exclude, unlike, dryRun, what }) {
   const cands = await sel(path);
-  const unreacted = await sel('linkedin.reaction.unreactedLabel');
+  const unreacted = sel(entry, 'reaction.unreactedLabel');
   const where = { scope, scopeMatch, exclude };
   const t = await locate(tabId, cands, where);
   if (t.error) notFound(what, t.error);
@@ -326,21 +330,19 @@ async function doLike(tabId, step, { path, scope, scopeMatch, exclude, unlike, d
 }
 
 export async function linkedin_like_post({ url, unlike = false, dryRun = false, active = false, keepTab = false } = {}) {
-  const exclude = await sel('linkedin.commentRowMarkers');
-  return onPage(url, { active, keepTab, waitFor: ['main'] }, async (tabId, step) =>
-    doLike(tabId, step, {
-      path: 'linkedin.post.likeButton',
-      scope: await sel('linkedin.post.root'), scopeMatch: activityUrn(url),
-      exclude, unlike, dryRun, what: 'post like button',
+  return onPage(url, { active, keepTab, waitFor: ['main'] }, async (tabId, step, entry) =>
+    doLike(tabId, step, entry, {
+      path: 'post.likeButton',
+      scope: sel(entry, 'post.root'), scopeMatch: activityUrn(url),
+      exclude: sel(entry, 'commentRowMarkers'), unlike, dryRun, what: 'post like button',
     }));
 }
 
 export async function linkedin_like_comment({ url, commentUrn, unlike = false, dryRun = false, active = false, keepTab = false } = {}) {
   if (!commentUrn) bad('commentUrn is required (e.g. urn:li:comment:(activity:123,456))');
-  const scope = await sel('linkedin.comment.row');
-  return onPage(url, { active, keepTab, waitFor: ['main'] }, (tabId, step) =>
-    doLike(tabId, step, {
-      path: 'linkedin.comment.likeButton', scope, scopeMatch: commentUrn,
+  return onPage(url, { active, keepTab, waitFor: ['main'] }, (tabId, step, entry) =>
+    doLike(tabId, step, entry, {
+      path: 'comment.likeButton', scope: sel(entry, 'comment.row'), scopeMatch: commentUrn,
       unlike, dryRun, what: `like button for ${commentUrn}`,
     }));
 }
@@ -349,23 +351,22 @@ export async function linkedin_like_comment({ url, commentUrn, unlike = false, d
 // The only extra work is expanding the replies list first.
 export async function linkedin_like_reply({ url, replyUrn, parentUrn, unlike = false, dryRun = false, active = false, keepTab = false } = {}) {
   if (!replyUrn) bad('replyUrn is required');
-  const scope = await sel('linkedin.comment.row');
-  return onPage(url, { active, keepTab, waitFor: ['main'] }, async (tabId, step) => {
-    await expandReplies(tabId, step, parentUrn);
-    return doLike(tabId, step, {
-      path: 'linkedin.comment.likeButton', scope, scopeMatch: replyUrn,
+  return onPage(url, { active, keepTab, waitFor: ['main'] }, async (tabId, step, entry) => {
+    await expandReplies(tabId, step, entry, parentUrn);
+    return doLike(tabId, step, entry, {
+      path: 'comment.likeButton', scope: sel(entry, 'comment.row'), scopeMatch: replyUrn,
       unlike, dryRun, what: `like button for reply ${replyUrn}`,
     });
   });
 }
 
 /** Replies are collapsed by default; click every "show previous replies". */
-async function expandReplies(tabId, step, parentUrn) {
-  const cands = await sel('linkedin.comment.showMoreReplies');
+async function expandReplies(tabId, step, entry, parentUrn) {
+  const cands = sel(entry, 'comment.showMoreReplies');
   if (!cands.length) return;
   for (let i = 0; i < 4; i++) {
     const t = await locate(tabId, cands, parentUrn
-      ? { scope: await sel('linkedin.comment.row'), scopeMatch: parentUrn }
+      ? { scope: sel(entry, 'comment.row'), scopeMatch: parentUrn }
       : {});
     if (t.error) break;
     await humanClick(tabId, t);
@@ -378,7 +379,7 @@ async function expandReplies(tabId, step, parentUrn) {
 // Comments and replies
 // ---------------------------------------------------------------------------
 
-async function writeComment(tabId, step, { openPath, scope, scopeMatch, exclude, text, dryRun, what }) {
+async function writeComment(tabId, step, entry, { openPath, scope, scopeMatch, exclude, text, dryRun, what }) {
   const opener = await locate(tabId, await sel(openPath), { scope, scopeMatch, exclude });
   if (opener.error) notFound(what, opener.error);
   await humanClick(tabId, opener);
@@ -388,7 +389,7 @@ async function writeComment(tabId, step, { openPath, scope, scopeMatch, exclude,
   // Once the reply composer is open it lives inside the comment row, so the
   // same scope keeps us off the post-level composer at the top of the page.
   const where = scopeMatch ? { scope, scopeMatch } : { exclude };
-  const boxCands = await sel('linkedin.composer.box');
+  const boxCands = sel(entry, 'composer.box');
   const box = await locate(tabId, boxCands, where);
   if (box.error) notFound('comment composer', box.error);
 
@@ -402,7 +403,7 @@ async function writeComment(tabId, step, { openPath, scope, scopeMatch, exclude,
   await sleep(jitter(900));
 
   // Only now does the submit control exist, so look for it after typing.
-  const submit = await findSubmit(tabId, { scope, scopeMatch });
+  const submit = await findSubmit(tabId, entry, { scope, scopeMatch });
   if (submit.error) {
     step('submit_missing', submit);
     const e = new Error(`submit button not found (${submit.error}) — run selectors_probe with prepare:"comment" on this URL to see what the composer renders once there is text`);
@@ -429,20 +430,18 @@ async function writeComment(tabId, step, { openPath, scope, scopeMatch, exclude,
 
 export async function linkedin_comment_post({ url, text, dryRun = false, active = false, keepTab = false } = {}) {
   if (!text || !text.trim()) bad('text is required');
-  const exclude = await sel('linkedin.commentRowMarkers');
-  return onPage(url, { active, keepTab, waitFor: ['main'] }, (tabId, step) =>
-    writeComment(tabId, step, {
-      openPath: 'linkedin.post.commentButton', exclude, text, dryRun, what: 'comment button',
+  return onPage(url, { active, keepTab, waitFor: ['main'] }, (tabId, step, entry) =>
+    writeComment(tabId, step, entry, {
+      openPath: 'post.commentButton', exclude: sel(entry, 'commentRowMarkers'), text, dryRun, what: 'comment button',
     }));
 }
 
 export async function linkedin_reply_comment({ url, commentUrn, text, dryRun = false, active = false, keepTab = false } = {}) {
   if (!commentUrn) bad('commentUrn is required');
   if (!text || !text.trim()) bad('text is required');
-  const scope = await sel('linkedin.comment.row');
-  return onPage(url, { active, keepTab, waitFor: ['main'] }, (tabId, step) =>
-    writeComment(tabId, step, {
-      openPath: 'linkedin.comment.replyButton', scope, scopeMatch: commentUrn,
+  return onPage(url, { active, keepTab, waitFor: ['main'] }, (tabId, step, entry) =>
+    writeComment(tabId, step, entry, {
+      openPath: 'comment.replyButton', scope: sel(entry, 'comment.row'), scopeMatch: commentUrn,
       text, dryRun, what: `reply button for ${commentUrn}`,
     }));
 }
@@ -452,22 +451,22 @@ export async function linkedin_reply_comment({ url, commentUrn, text, dryRun = f
 // ---------------------------------------------------------------------------
 
 export async function linkedin_invite({ url, note = '', dryRun = false, active = false, keepTab = false } = {}) {
-  return onPage(url, { active, keepTab, waitFor: ['main'] }, async (tabId, step) => {
-    const pending = await locate(tabId, await sel('linkedin.profile.pendingMarker'));
+  return onPage(url, { active, keepTab, waitFor: ['main'] }, async (tabId, step, entry) => {
+    const pending = await locate(tabId, sel(entry, 'profile.pendingMarker'));
     if (!pending.error) {
       step('noop', { reason: 'invitation already pending' });
       return { ok: true, sent: false, alreadyPending: true };
     }
 
     // Connect sits on the action bar on some profiles and under "More" on others.
-    let connect = await locate(tabId, await sel('linkedin.profile.connectButton'));
+    let connect = await locate(tabId, sel(entry, 'profile.connectButton'));
     if (connect.error) {
-      const more = await locate(tabId, await sel('linkedin.profile.moreButton'));
+      const more = await locate(tabId, sel(entry, 'profile.moreButton'));
       if (more.error) notFound('Connect button (and More menu)', more.error);
       await humanClick(tabId, more);
       step('more_menu');
       await sleep(jitter(900));
-      connect = await locate(tabId, await sel('linkedin.profile.moreConnectItem'));
+      connect = await locate(tabId, sel(entry, 'profile.moreConnectItem'));
       if (connect.error) notFound('Connect entry in the More menu', connect.error);
     }
 
@@ -479,33 +478,33 @@ export async function linkedin_invite({ url, note = '', dryRun = false, active =
     await sleep(jitter(1600));
 
     if (note && note.trim()) {
-      const addNote = await locate(tabId, await sel('linkedin.profile.addNote'));
+      const addNote = await locate(tabId, sel(entry, 'profile.addNote'));
       if (!addNote.error) {
         await humanClick(tabId, addNote);
         await sleep(jitter(800));
-        const box = await locate(tabId, await sel('linkedin.profile.noteBox'));
+        const box = await locate(tabId, sel(entry, 'profile.noteBox'));
         if (!box.error) { await humanClick(tabId, box); await humanType(tabId, note.trim()); step('note_typed'); }
       }
-      const send = await locate(tabId, await sel('linkedin.profile.sendInvite'));
+      const send = await locate(tabId, sel(entry, 'profile.sendInvite'));
       if (send.error) notFound('Send invitation button', send.error);
       await humanClick(tabId, send);
     } else {
       // Prefer the explicit no-note path; fall back to the generic send.
-      let send = await locate(tabId, await sel('linkedin.profile.sendWithoutNote'));
-      if (send.error) send = await locate(tabId, await sel('linkedin.profile.sendInvite'));
+      let send = await locate(tabId, sel(entry, 'profile.sendWithoutNote'));
+      if (send.error) send = await locate(tabId, sel(entry, 'profile.sendInvite'));
       if (send.error) notFound('Send button in the invitation modal', send.error);
       await humanClick(tabId, send);
     }
     await sleep(jitter(2400));
 
-    const after = await locate(tabId, await sel('linkedin.profile.pendingMarker'));
+    const after = await locate(tabId, sel(entry, 'profile.pendingMarker'));
     const confirmed = !after.error;
     if (confirmed) await consumeBudget('invite');
     step('sent', { confirmed });
 
     // Leave no modal behind if the confirmation never appeared.
     if (!confirmed) {
-      const x = await locate(tabId, await sel('linkedin.profile.dismissModal'));
+      const x = await locate(tabId, sel(entry, 'profile.dismissModal'));
       if (!x.error) await humanClick(tabId, x);
     }
     return { ok: confirmed, sent: confirmed, withNote: !!(note && note.trim()) };

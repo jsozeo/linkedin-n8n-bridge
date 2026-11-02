@@ -1,7 +1,6 @@
 import { loadConfig, DEFAULT_CRON } from './config.js';
 import { dispatch } from './commands/index.js';
 import { nextRun } from './cron.js';
-import { refreshSelectors } from './selectors.js';
 
 const ALARM_NAME = 'cron-tick';
 const MAX_TASKS_PER_CYCLE = 50;
@@ -136,10 +135,6 @@ async function runCycle(trigger = 'alarm') {
     }
 
     console.log('[bridge] cycle start', trigger);
-    // Pull the cloud selector document before running anything, so a selector
-    // fix lands on the next cycle instead of waiting for an extension reload.
-    // TTL-gated inside, and never throws.
-    await refreshSelectors();
 
     // Poll ONCE per tick. The orchestrator (n8n random-switch) always answers
     // with a task, so a re-fetch loop would open a tab on every iteration up to

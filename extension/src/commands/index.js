@@ -78,7 +78,7 @@ const handlers = {
   list_social_skills:  social.list_social_skills,
   linkedin_extract:    social.linkedin_extract, // backwards-compatible alias
 
-  // LinkedIn write actions — budgeted in guard.js, selectors in selectors.js
+  // LinkedIn write actions — budgeted in guard.js, selectors come from the cloud registry
   linkedin_like_post:      write.linkedin_like_post,
   linkedin_like_comment:   write.linkedin_like_comment,
   linkedin_like_reply:     write.linkedin_like_reply,

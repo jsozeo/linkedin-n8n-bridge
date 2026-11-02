@@ -164,15 +164,15 @@ function onBuilderChanged() {
 async function loadIntoForm() {
   const cfg = await chrome.storage.local.get([
     'token', 'clientId', 'n8n', 'schedule',
-    'selectorsUrl', 'selectorsWriteUrl', 'selectorsWriteToken',
+    'registryUrl', 'registryWriteUrl', 'registryWriteToken',
   ]);
   $('token').value = cfg.token || '';
   $('clientId').value = cfg.clientId || '';
   $('pollUrl').value = cfg.n8n?.pollUrl || '';
   $('resultUrl').value = cfg.n8n?.resultUrl || '';
-  $('selectorsUrl').value = cfg.selectorsUrl || '';
-  $('selectorsWriteUrl').value = cfg.selectorsWriteUrl || '';
-  $('selectorsWriteToken').value = cfg.selectorsWriteToken || '';
+  $('registryUrl').value = cfg.selectorsUrl || '';
+  $('registryWriteUrl').value = cfg.selectorsWriteUrl || '';
+  $('registryWriteToken').value = cfg.selectorsWriteToken || '';
   await renderSelectorsState();
   $('enabled').checked = Boolean(cfg.schedule?.enabled);
   setCronField(cfg.schedule?.cron || '* * * * *', { reflect: true });
@@ -189,9 +189,9 @@ function collect() {
       resultUrl: $('resultUrl').value.trim() || undefined,
     },
     schedule: { enabled: $('enabled').checked, cron: $('cron').value.trim() || '*/15 9-18 * * 1-5' },
-    selectorsUrl: $('selectorsUrl').value.trim() || undefined,
-    selectorsWriteUrl: $('selectorsWriteUrl').value.trim() || undefined,
-    selectorsWriteToken: $('selectorsWriteToken').value.trim() || undefined,
+    registryUrl: $('registryUrl').value.trim() || undefined,
+    registryWriteUrl: $('registryWriteUrl').value.trim() || undefined,
+    registryWriteToken: $('registryWriteToken').value.trim() || undefined,
   };
 }
 
@@ -200,11 +200,11 @@ function collect() {
 async function saveSelectors() {
   const v = {
     n8n: { pollUrl: '', resultUrl: '' },
-    selectorsUrl: $('selectorsUrl').value.trim(),
-    selectorsWriteUrl: $('selectorsWriteUrl').value.trim(),
-    selectorsWriteToken: $('selectorsWriteToken').value.trim(),
+    registryUrl: $('registryUrl').value.trim(),
+    registryWriteUrl: $('registryWriteUrl').value.trim(),
+    registryWriteToken: $('registryWriteToken').value.trim(),
   };
-  for (const [k, label] of [['selectorsUrl', 'Registry URL'], ['selectorsWriteUrl', 'Publish URL']]) {
+  for (const [k, label] of [['registryUrl', 'Registry URL'], ['registryWriteUrl', 'Publish URL']]) {
     if (v[k] && !/^https:\/\/.+/.test(v[k])) {
       setStatus($('status'), `${label} must be https.`, 'err');
       return;
@@ -237,11 +237,14 @@ async function renderSelectorsState() {
   if (!el) return;
   try {
     const res = await chrome.runtime.sendMessage({ cmd: 'manual-run', type: 'selectors_status', params: {} });
-    const s = res?.data?.selectors;
+    const s = res?.data?.registry;
     if (!s) { el.textContent = '—'; return; }
-    const source = s.url ? (s.fetchedAt ? 'cloud' : 'cloud (not fetched yet)') : 'bundled with the extension';
-    const age = s.fetchedAt ? `fetched ${Math.round((Date.now() - s.fetchedAt) / 60_000)} min ago` : 'no copy cached';
-    el.textContent = `${source} · version ${s.version} · ${age}${s.stale && s.fetchedAt ? ' · stale' : ''}`;
+    if (!s.url) { el.textContent = 'not configured — jobs will stop until a registry URL is set'; return; }
+    if (s.error) { el.textContent = `unreachable: ${s.error}`; return; }
+    const n = (s.entries || []).length;
+    const withExtractor = (s.entries || []).filter((e) => e.has_extractor).length;
+    el.textContent = `${n} page types published · ${withExtractor} with an extractor · interface language ${s.uiLocale}`
+      + (s.failures ? ` · ${s.failures.count} recent failures` : '');
   } catch {
     el.textContent = '—';
   }
@@ -280,7 +283,7 @@ async function save() {
   catch (e) { console.error(e); granted = false; }
   if (!granted) { setStatus($('status'), 'Permission to contact your automation host was denied.', 'err'); return; }
 
-  const { selectorsUrl, selectorsWriteUrl, selectorsWriteToken, ...core } = next;
+  const { registryUrl, registryWriteUrl, registryWriteToken, ...core } = next;
   await chrome.storage.local.set(core);
   // Goes through the command so the cached document is dropped when the URL moves.
   try {
