@@ -162,11 +162,18 @@ function onBuilderChanged() {
 // ---------------------------------------------------------------------------
 
 async function loadIntoForm() {
-  const cfg = await chrome.storage.local.get(['token', 'clientId', 'n8n', 'schedule']);
+  const cfg = await chrome.storage.local.get([
+    'token', 'clientId', 'n8n', 'schedule',
+    'selectorsUrl', 'selectorsWriteUrl', 'selectorsWriteToken',
+  ]);
   $('token').value = cfg.token || '';
   $('clientId').value = cfg.clientId || '';
   $('pollUrl').value = cfg.n8n?.pollUrl || '';
   $('resultUrl').value = cfg.n8n?.resultUrl || '';
+  $('selectorsUrl').value = cfg.selectorsUrl || '';
+  $('selectorsWriteUrl').value = cfg.selectorsWriteUrl || '';
+  $('selectorsWriteToken').value = cfg.selectorsWriteToken || '';
+  await renderSelectorsState();
   $('enabled').checked = Boolean(cfg.schedule?.enabled);
   setCronField(cfg.schedule?.cron || '* * * * *', { reflect: true });
   await renderDiagnostics();
@@ -182,7 +189,62 @@ function collect() {
       resultUrl: $('resultUrl').value.trim() || undefined,
     },
     schedule: { enabled: $('enabled').checked, cron: $('cron').value.trim() || '*/15 9-18 * * 1-5' },
+    selectorsUrl: $('selectorsUrl').value.trim() || undefined,
+    selectorsWriteUrl: $('selectorsWriteUrl').value.trim() || undefined,
+    selectorsWriteToken: $('selectorsWriteToken').value.trim() || undefined,
   };
+}
+
+// The registry is usable on its own — notably for a local test run with no
+// automation host configured — so it saves without going through validate().
+async function saveSelectors() {
+  const v = {
+    n8n: { pollUrl: '', resultUrl: '' },
+    selectorsUrl: $('selectorsUrl').value.trim(),
+    selectorsWriteUrl: $('selectorsWriteUrl').value.trim(),
+    selectorsWriteToken: $('selectorsWriteToken').value.trim(),
+  };
+  for (const [k, label] of [['selectorsUrl', 'Registry URL'], ['selectorsWriteUrl', 'Publish URL']]) {
+    if (v[k] && !/^https:\/\/.+/.test(v[k])) {
+      setStatus($('status'), `${label} must be https.`, 'err');
+      return;
+    }
+  }
+
+  try {
+    if (!(await ensureHostPermissions(v))) {
+      setStatus($('status'), 'Permission to reach the registry was denied.', 'err');
+      return;
+    }
+  } catch (e) { console.error(e); }
+
+  const res = await chrome.runtime.sendMessage({
+    cmd: 'manual-run',
+    type: 'selectors_set_url',
+    params: {
+      url: v.selectorsUrl || null,
+      writeUrl: v.selectorsWriteUrl || null,
+      writeToken: v.selectorsWriteToken || null,
+    },
+  });
+  if (res?.ok) setStatus($('status'), v.selectorsUrl ? 'Registry fetched ✓' : 'Using the bundled selectors.', 'ok');
+  else setStatus($('status'), 'Registry: ' + (res?.error?.message || 'failed'), 'err');
+  await renderSelectorsState();
+}
+
+async function renderSelectorsState() {
+  const el = $('selectorsState');
+  if (!el) return;
+  try {
+    const res = await chrome.runtime.sendMessage({ cmd: 'manual-run', type: 'selectors_status', params: {} });
+    const s = res?.data?.selectors;
+    if (!s) { el.textContent = '—'; return; }
+    const source = s.url ? (s.fetchedAt ? 'cloud' : 'cloud (not fetched yet)') : 'bundled with the extension';
+    const age = s.fetchedAt ? `fetched ${Math.round((Date.now() - s.fetchedAt) / 60_000)} min ago` : 'no copy cached';
+    el.textContent = `${source} · version ${s.version} · ${age}${s.stale && s.fetchedAt ? ' · stale' : ''}`;
+  } catch {
+    el.textContent = '—';
+  }
 }
 
 function validate(v) {
@@ -190,12 +252,19 @@ function validate(v) {
   if (!v.token || v.token.length < 16) errs.push('token (≥16 chars)');
   if (!/^https?:\/\/.+/.test(v.n8n.pollUrl)) errs.push('poll URL');
   if (v.n8n.resultUrl && !/^https?:\/\/.+/.test(v.n8n.resultUrl)) errs.push('result URL');
+  if (v.selectorsUrl && !/^https?:\/\/.+/.test(v.selectorsUrl)) errs.push('registry URL');
+  if (v.selectorsWriteUrl && !/^https?:\/\/.+/.test(v.selectorsWriteUrl)) errs.push('registry publish URL');
   if (!validateCron(v.schedule.cron).valid) errs.push('cron expression');
   return errs;
 }
 
 async function ensureHostPermissions(v) {
-  const origins = [originPattern(v.n8n.pollUrl), v.n8n.resultUrl && originPattern(v.n8n.resultUrl)].filter(Boolean);
+  const origins = [...new Set([
+    originPattern(v.n8n.pollUrl),
+    v.n8n.resultUrl && originPattern(v.n8n.resultUrl),
+    v.selectorsUrl && originPattern(v.selectorsUrl),
+    v.selectorsWriteUrl && originPattern(v.selectorsWriteUrl),
+  ].filter(Boolean))];
   if (!origins.length) return true;
   if (await chrome.permissions.contains({ origins })) return true;
   return chrome.permissions.request({ origins });
@@ -211,10 +280,25 @@ async function save() {
   catch (e) { console.error(e); granted = false; }
   if (!granted) { setStatus($('status'), 'Permission to contact your automation host was denied.', 'err'); return; }
 
-  await chrome.storage.local.set(next);
+  const { selectorsUrl, selectorsWriteUrl, selectorsWriteToken, ...core } = next;
+  await chrome.storage.local.set(core);
+  // Goes through the command so the cached document is dropped when the URL moves.
+  try {
+    await chrome.runtime.sendMessage({
+      cmd: 'manual-run',
+      type: 'selectors_set_url',
+      params: {
+        url: selectorsUrl || null,
+        writeUrl: selectorsWriteUrl || null,
+        writeToken: selectorsWriteToken || null,
+      },
+    });
+  } catch (e) { console.error(e); }
+
   try { await chrome.runtime.sendMessage({ cmd: 'reschedule' }); } catch { /* SW waking */ }
   setStatus($('status'), next.schedule.enabled ? 'Saved ✓ — scheduler armed.' : 'Saved ✓ — scheduler off.', 'ok');
   await renderDiagnostics();
+  await renderSelectorsState();
   setTimeout(renderStatus, 300);
 }
 
@@ -307,11 +391,55 @@ async function renderDiagnostics() {
 // Manual run
 // ---------------------------------------------------------------------------
 
+// Write actions are prefixed 'w:', registry commands 'r:'. Everything else is
+// an extractor kind passed through to social_extract.
+const NEEDS_TEXT = new Set(['linkedin_comment_post', 'linkedin_reply_comment', 'linkedin_invite']);
+const NEEDS_URN = new Set(['linkedin_like_comment', 'linkedin_reply_comment', 'linkedin_like_reply']);
+
+function syncManualFields() {
+  const action = $('manualAction').value;
+  const write = action.startsWith('w:');
+  const cmd = write ? action.slice(2) : '';
+  $('manualLiveRow').hidden = !write;
+  $('manualTextRow').hidden = !NEEDS_TEXT.has(cmd);
+  $('manualUrnRow').hidden = !NEEDS_URN.has(cmd);
+  $('manualUrl').disabled = action.startsWith('r:');
+}
+
+function buildProbeTask(url, active, mode) {
+  if (!/^https?:\/\/.+/.test(url)) return { error: 'Enter a valid http(s) URL.' };
+  return {
+    task: {
+      type: 'selectors_probe',
+      params: { url, active, prepare: mode === 'comment' ? 'comment' : null, keepTab: mode === 'comment' },
+    },
+  };
+}
+
 function buildManualTask() {
   const url = $('manualUrl').value.trim();
   const action = $('manualAction').value;
   const active = $('manualActive').checked;
+
+  if (action.startsWith('r:')) return { task: { type: action.slice(2), params: {} } };
+  if (action.startsWith('p:')) return buildProbeTask(url, active, action.slice(2));
   if (!/^https?:\/\/.+/.test(url)) return { error: 'Enter a valid http(s) URL.' };
+
+  if (action.startsWith('w:')) {
+    const type = action.slice(2);
+    const params = { url, active, dryRun: !$('manualLive').checked };
+    if (NEEDS_TEXT.has(type)) {
+      const text = $('manualText').value.trim();
+      if (!text && type !== 'linkedin_invite') return { error: 'This action needs some text.' };
+      if (type === 'linkedin_invite') params.note = text; else params.text = text;
+    }
+    if (NEEDS_URN.has(type)) {
+      const urn = $('manualUrn').value.trim();
+      if (!urn) return { error: 'This action needs a comment URN (get_comments returns it as comment_urn).' };
+      if (type === 'linkedin_like_reply') params.replyUrn = urn; else params.commentUrn = urn;
+    }
+    return { task: { type, params } };
+  }
 
   if (action === 'open') return { task: { type: 'open_tab', params: { url, active: true } } };
   const params = { url, active };
@@ -376,6 +504,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('genToken').addEventListener('click', genToken);
   $('toggleTokenVis').addEventListener('click', toggleTokenVisibility);
   $('manualRun').addEventListener('click', manualRun);
+  $('saveSelectors').addEventListener('click', saveSelectors);
+  $('manualAction').addEventListener('change', syncManualFields);
+  syncManualFields();
 
   // Cron builder wiring
   for (const id of ['bFreq', 'bFrom', 'bTo', 'bAllDay']) $(id).addEventListener('change', onBuilderChanged);

@@ -29,12 +29,38 @@
             <option value="linkedin.comments">Post → post + comments</option>
             <option value="linkedin.jobs">Jobs → list</option>
           </optgroup>
+          <optgroup label="LinkedIn — write actions">
+            <option value="w:linkedin_like_post">Like the post</option>
+            <option value="w:linkedin_comment_post">Comment on the post</option>
+            <option value="w:linkedin_like_comment">Like a comment</option>
+            <option value="w:linkedin_reply_comment">Reply to a comment</option>
+            <option value="w:linkedin_like_reply">Like a reply</option>
+            <option value="w:linkedin_invite">Send a connection invitation</option>
+          </optgroup>
+          <optgroup label="Selector registry">
+            <option value="p:plain">Inspect this page → what matches, what is broken</option>
+            <option value="p:comment">Inspect with the comment box open (shows the submit button)</option>
+            <option value="r:selectors_status">Show the active registry</option>
+            <option value="r:selectors_refresh">Force a refresh from the cloud</option>
+          </optgroup>
           <option value="open">Just open the page</option>
         </select>
+      </label>
+      <label id="manualTextRow" hidden>
+        <span>Comment / note text</span>
+        <input id="manualText" type="text" autocomplete="off" placeholder="What to post…" />
+      </label>
+      <label id="manualUrnRow" hidden>
+        <span>Comment URN</span>
+        <input id="manualUrn" type="text" autocomplete="off" placeholder="urn:li:comment:(activity:7123…,456…)" />
       </label>
       <label class="inline">
         <input id="manualActive" type="checkbox" checked />
         <span>Show the tab while it runs</span>
+      </label>
+      <label class="inline" id="manualLiveRow" hidden>
+        <input id="manualLive" type="checkbox" />
+        <span>Really do it (unchecked = dry run, nothing is sent to LinkedIn)</span>
       </label>
       <div class="actions tight">
         <button id="manualRun" class="primary" type="button">Run</button>
@@ -63,6 +89,30 @@
       <p class="hint">
         <button id="genToken" class="link" type="button">generate</button> ·
         <button id="toggleTokenVis" class="link" type="button">show / hide</button>
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Selector registry</h2>
+      <p class="hint">
+        Where the extension reads its page selectors from. Leave empty to use the ones
+        bundled with the extension.
+      </p>
+      <label>
+        <span>Registry URL <em>(GET, read)</em></span>
+        <input id="selectorsUrl" type="url" autocomplete="off" placeholder="https://…/selectors" />
+      </label>
+      <label>
+        <span>Publish URL <em>(optional, POST — needed to fix selectors from here)</em></span>
+        <input id="selectorsWriteUrl" type="url" autocomplete="off" placeholder="same as above, usually" />
+      </label>
+      <label>
+        <span>Publish token</span>
+        <input id="selectorsWriteToken" type="password" autocomplete="off" placeholder="bearer token…" />
+      </label>
+      <p class="hint">
+        <button id="saveSelectors" class="link" type="button">save &amp; fetch</button> ·
+        <span id="selectorsState">—</span>
       </p>
     </section>
 
