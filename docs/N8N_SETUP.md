@@ -50,6 +50,82 @@ Lower-level primitives also exist (`open_tab`, `close_tab`, `wait_for_selector`,
 
 ---
 
+## Write actions
+
+Six commands act on LinkedIn instead of reading it. They are dispatched exactly
+like `social_extract` — same `{ taskId, type, params }` envelope.
+
+| type | params | Does |
+|---|---|---|
+| `linkedin_like_post` | `url` | Likes the post the permalink points at |
+| `linkedin_comment_post` | `url`, `text` | Posts a top-level comment |
+| `linkedin_like_comment` | `url`, `commentUrn` | Likes one comment |
+| `linkedin_reply_comment` | `url`, `commentUrn`, `text` | Replies to one comment |
+| `linkedin_like_reply` | `url`, `replyUrn`, `parentUrn` (optional) | Likes a reply |
+| `linkedin_invite` | `url` (a `/in/…` profile), `note` (optional) | Sends a connection invitation |
+
+`commentUrn` / `replyUrn` come straight out of `linkedin.comments`, which
+already returns `comment_urn` on every comment it harvests.
+
+Three behaviours worth knowing before you wire these up.
+
+**`dryRun: true` changes nothing on LinkedIn.** The command still opens the tab,
+resolves the target and reports which selector matched — it just stops before
+clicking. Use it to confirm a selector change, and to verify a URN resolves,
+without spending an action.
+
+**Actions are idempotent.** Liking something already liked, or inviting someone
+whose invitation is pending, returns `{ ok: true, changed: false }` instead of
+acting twice. Success is confirmed by re-reading the DOM (`aria-pressed` flipped,
+composer emptied, Pending appeared), so `ok: true` means LinkedIn accepted it,
+not merely that a click was dispatched.
+
+**There is a hard budget.** Unlike scraping pace, which n8n owns, write volume is
+capped inside the extension — 60 likes, 15 comments and 20 invitations a day,
+with a cooldown between consecutive actions of the same kind. Over the cap you
+get `code: "RATE_LIMITED"` and a `retryAfterMs`; nothing is sent. Override via
+the `writeLimits` key in `chrome.storage.local`, and read the current ledger
+with the `selectors_status` command.
+
+---
+
+## Selector registry (no more extension reloads)
+
+LinkedIn reshuffles its DOM every few weeks. Rather than rebuild the extension
+each time, write-action selectors live in a JSON document served from S3 and
+refetched on every poll cycle.
+
+```
+extension/selectors.json   →  ./test-server/push-selectors.sh  →  s3://…/selectors.json
+                                                                        ↓
+                                                      GET <function-url>/selectors
+```
+
+Point the extension at it once:
+
+```json
+{ "taskId": "…", "type": "selectors_set_url", "params": { "url": "https://<function-url>/selectors" } }
+```
+
+From then on, fixing a selector is: edit the JSON, bump `version`, run the push
+script. The next cycle picks it up (10-minute TTL, or force it immediately with
+`selectors_refresh`). You only rebuild the extension when you add a new *command*,
+not when a selector moves.
+
+| type | Does |
+|---|---|
+| `selectors_status` | Which document is live, how old it is, plus the write budget |
+| `selectors_refresh` | Force a fetch now, ignoring the TTL |
+| `selectors_set_url` | Point at a document (`url: null` reverts to bundled) |
+| `selectors_get` | Dump the merged registry, or one path via `path` |
+
+Every entry is a *list* of candidates tried in order, so you add the new selector
+ahead of the old one and leave the old one in place until you're sure. If the
+fetch fails the previous cache stays in force; if there is no cache the extension
+falls back to the selectors it shipped with. It never ends up with none.
+
+---
+
 ## The queue (what makes "n8n pushes a job" work)
 
 n8n has no built-in durable queue, so you keep a tiny one. Pick one:
