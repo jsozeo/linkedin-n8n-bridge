@@ -6,17 +6,17 @@
   <link rel="stylesheet" href="options.css">
 </head>
 <body class="fullpage">
-  <main>
-    <header>
-      <h1>Social Media Bridge for n8n</h1>
-      <p class="sub">Everything that is set once and then forgotten.</p>
-      <p class="build" id="buildStamp" title="The build Chrome is running. If this timestamp is older than your last stamp, the reload did not take. Click to copy."></p>
-    </header>
+  <nav class="sidenav" id="tabs">
+    <div class="brand">
+      <strong>Social Media Bridge</strong>
+      <span class="build" id="buildStamp" title="The build Chrome is running. If this timestamp is older than your last stamp, the reload did not take. Click to copy."></span>
+    </div>
+    <button type="button" class="tab" data-view="settings">Settings</button>
+    <button type="button" class="tab" data-view="selectors">Selectors</button>
+    <button type="button" class="tab" data-view="capture">Page data</button>
+  </nav>
 
-    <nav class="tabs" id="tabs">
-      <button type="button" class="tab" data-view="settings">Settings</button>
-      <button type="button" class="tab" data-view="capture">Page data</button>
-    </nav>
+  <main>
 
     <!-- ------------------------------------------------------------------ -->
     <div class="view" id="view-settings">
@@ -156,6 +156,54 @@
           <summary>Raw storage</summary>
           <pre id="diagnostics"></pre>
         </details>
+      </section>
+    </div>
+
+    <!-- ------------------------------------------------------------------ -->
+    <div class="view" id="view-selectors" hidden>
+      <section class="card accent">
+        <h2>Published selectors</h2>
+        <p class="hint">
+          Every page type the registry can currently extract, across all sites —
+          not just LinkedIn. A page type that is not listed here cannot be read,
+          which is exactly what <strong>Read this page</strong> reports when it
+          refuses a URL.
+        </p>
+        <div class="toolbar">
+          <input id="selFilter" type="search" placeholder="Filter by domain, page type or step key…" />
+          <label class="inline">
+            <input id="selGroup" type="checkbox" checked />
+            <span>Group by domain</span>
+          </label>
+          <button id="selRefresh" class="ghost" type="button">Refresh</button>
+        </div>
+        <p id="selSummary" class="hint">loading…</p>
+      </section>
+
+      <section class="card">
+        <table class="grid" id="selTable">
+          <thead>
+            <tr>
+              <th data-sort="domain">Domain</th>
+              <th data-sort="pageType">Page type</th>
+              <th data-sort="locale">Locale</th>
+              <th data-sort="steps">Step keys</th>
+              <th data-sort="actions" class="num">Actions</th>
+              <th data-sort="size" class="num">Extractor</th>
+              <th data-sort="published">Published</th>
+            </tr>
+          </thead>
+          <tbody id="selBody"></tbody>
+        </table>
+      </section>
+
+      <section class="card subtle">
+        <h2>Matching rule</h2>
+        <p class="hint">
+          The URL pattern each page type claims. Two patterns that can match the
+          same URL are resolved by priority, so overlaps are worth a look.
+        </p>
+        <pre id="selRegex" class="wide"></pre>
       </section>
     </div>
 

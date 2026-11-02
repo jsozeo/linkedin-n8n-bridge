@@ -11,7 +11,7 @@ let tokenVisible = false;
 // Views
 // ---------------------------------------------------------------------------
 
-const VIEWS = ['settings', 'capture'];
+const VIEWS = ['settings', 'selectors', 'capture'];
 
 function showView(name) {
   const view = VIEWS.includes(name) ? name : 'settings';
@@ -21,6 +21,7 @@ function showView(name) {
   }
   if (location.hash.slice(1) !== view) history.replaceState(null, '', `#${view}`);
   if (view === 'capture') renderCapture();
+  if (view === 'selectors') loadSelectors();
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +388,117 @@ async function renderDiagnostics() {
 }
 
 // ---------------------------------------------------------------------------
+// Selectors
+// ---------------------------------------------------------------------------
+
+let selEntries = null;
+let selSort = { key: 'domain', dir: 1 };
+
+/**
+ * The registry index knows a platform ('linkedin'), which is a label we chose,
+ * not the host the entry actually matches. The host is in the URL pattern, so
+ * read it from there and keep the platform only as a fallback — that way a new
+ * site shows up under its real domain without anyone maintaining a second list.
+ */
+function domainOf(entry) {
+  const plain = String(entry.url_regex || '').replace(/\\/g, '');
+  const host = plain.match(/(?:^|\/\/|[^a-z0-9.-])((?:[a-z0-9-]+\.)+[a-z]{2,})/i);
+  return host ? host[1].toLowerCase() : (entry.platform || 'unknown');
+}
+
+function selRows() {
+  return (selEntries || []).map((e) => ({
+    domain: domainOf(e),
+    pageType: e.page_type || '',
+    locale: e.ui_locale || 'any',
+    steps: (e.step_keys || []).join(', '),
+    actions: e.action_count || 0,
+    size: e.extract_js_bytes || 0,
+    published: e.published_at || '',
+    version: e.version || '',
+    regex: e.url_regex || '',
+    platform: e.platform || '',
+  }));
+}
+
+function renderSelectors() {
+  const body = $('selBody');
+  const summary = $('selSummary');
+  if (!body) return;
+
+  if (!selEntries) { body.innerHTML = ''; summary.textContent = 'loading…'; return; }
+
+  const needle = ($('selFilter').value || '').trim().toLowerCase();
+  let rows = selRows().filter((r) => !needle
+    || r.domain.includes(needle) || r.pageType.includes(needle) || r.steps.toLowerCase().includes(needle));
+
+  const { key, dir } = selSort;
+  rows.sort((a, b) => {
+    // Inside a domain the page type is the useful tiebreak, so a sort on any
+    // other column still reads as a grouped list rather than a shuffled one.
+    if ($('selGroup').checked && a.domain !== b.domain) return a.domain.localeCompare(b.domain);
+    const x = a[key], y = b[key];
+    const cmp = typeof x === 'number' ? x - y : String(x).localeCompare(String(y));
+    return cmp * dir || a.pageType.localeCompare(b.pageType);
+  });
+
+  const domains = new Set(rows.map((r) => r.domain));
+  const kb = rows.reduce((t, r) => t + r.size, 0) / 1024;
+  summary.textContent = `${rows.length} page type${rows.length === 1 ? '' : 's'} across `
+    + `${domains.size} domain${domains.size === 1 ? '' : 's'} · ${kb.toFixed(0)} KB of extractors`
+    + (needle ? ` · filtered on “${needle}”` : '');
+
+  body.innerHTML = '';
+  let lastDomain = null;
+  for (const r of rows) {
+    if ($('selGroup').checked && r.domain !== lastDomain) {
+      const head = document.createElement('tr');
+      head.className = 'grouprow';
+      head.innerHTML = `<td colspan="7">${r.domain}</td>`;
+      body.appendChild(head);
+      lastDomain = r.domain;
+    }
+    const tr = document.createElement('tr');
+    tr.tabIndex = 0;
+    tr.append(
+      cell(r.domain, 'muted'), cell(r.pageType, 'strong'), cell(r.locale, 'muted'),
+      cell(r.steps || '—', 'mono'), cell(String(r.actions), 'num'),
+      cell(`${(r.size / 1024).toFixed(1)} KB`, 'num'),
+      cell((r.published || '').slice(0, 16).replace('T', ' ') || '—', 'muted'),
+    );
+    const show = () => { $('selRegex').textContent = `${r.domain} · ${r.pageType}\n${r.regex}\n\nversion ${r.version}`; };
+    tr.addEventListener('click', show);
+    tr.addEventListener('focus', show);
+    body.appendChild(tr);
+  }
+}
+
+function cell(text, cls) {
+  const td = document.createElement('td');
+  td.textContent = text;
+  if (cls) td.className = cls;
+  return td;
+}
+
+async function loadSelectors(force = false) {
+  if (selEntries && !force) { renderSelectors(); return; }
+  try {
+    const res = await chrome.runtime.sendMessage({ cmd: 'manual-run', type: 'selectors_status', params: {} });
+    const reg = res?.data?.registry;
+    if (!reg || reg.error) {
+      $('selSummary').textContent = `Registry unreachable — ${reg?.error || 'no answer'}`;
+      selEntries = [];
+    } else {
+      selEntries = reg.entries || [];
+    }
+  } catch (e) {
+    $('selSummary').textContent = `Registry unreachable — ${e.message}`;
+    selEntries = [];
+  }
+  renderSelectors();
+}
+
+// ---------------------------------------------------------------------------
 // Page data
 // ---------------------------------------------------------------------------
 
@@ -516,6 +628,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('genToken').addEventListener('click', genToken);
   $('toggleTokenVis').addEventListener('click', toggleTokenVisibility);
   $('saveSelectors').addEventListener('click', saveSelectors);
+
+  $('selFilter').addEventListener('input', renderSelectors);
+  $('selGroup').addEventListener('change', renderSelectors);
+  $('selRefresh').addEventListener('click', () => loadSelectors(true));
+  for (const th of document.querySelectorAll('#selTable th[data-sort]')) {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      selSort = { key, dir: selSort.key === key ? -selSort.dir : 1 };
+      for (const o of document.querySelectorAll('#selTable th')) o.classList.remove('asc', 'desc');
+      th.classList.add(selSort.dir === 1 ? 'asc' : 'desc');
+      renderSelectors();
+    });
+  }
+
   $('captureCopy').addEventListener('click', captureCopy);
   $('captureDownload').addEventListener('click', captureDownload);
   $('captureClear').addEventListener('click', captureClear);
