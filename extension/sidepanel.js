@@ -164,14 +164,13 @@ function onBuilderChanged() {
 async function loadIntoForm() {
   const cfg = await chrome.storage.local.get([
     'token', 'clientId', 'n8n', 'schedule',
-    'registryUrl', 'registryWriteUrl', 'registryWriteToken',
+    'registryUrl', 'registryWriteToken',
   ]);
   $('token').value = cfg.token || '';
   $('clientId').value = cfg.clientId || '';
   $('pollUrl').value = cfg.n8n?.pollUrl || '';
   $('resultUrl').value = cfg.n8n?.resultUrl || '';
   $('registryUrl').value = cfg.selectorsUrl || '';
-  $('registryWriteUrl').value = cfg.selectorsWriteUrl || '';
   $('registryWriteToken').value = cfg.selectorsWriteToken || '';
   await renderSelectorsState();
   $('enabled').checked = Boolean(cfg.schedule?.enabled);
@@ -190,7 +189,6 @@ function collect() {
     },
     schedule: { enabled: $('enabled').checked, cron: $('cron').value.trim() || '*/15 9-18 * * 1-5' },
     registryUrl: $('registryUrl').value.trim() || undefined,
-    registryWriteUrl: $('registryWriteUrl').value.trim() || undefined,
     registryWriteToken: $('registryWriteToken').value.trim() || undefined,
   };
 }
@@ -201,14 +199,11 @@ async function saveSelectors() {
   const v = {
     n8n: { pollUrl: '', resultUrl: '' },
     registryUrl: $('registryUrl').value.trim(),
-    registryWriteUrl: $('registryWriteUrl').value.trim(),
     registryWriteToken: $('registryWriteToken').value.trim(),
   };
-  for (const [k, label] of [['registryUrl', 'Registry URL'], ['registryWriteUrl', 'Publish URL']]) {
-    if (v[k] && !/^https:\/\/.+/.test(v[k])) {
-      setStatus($('status'), `${label} must be https.`, 'err');
-      return;
-    }
+  if (v.registryUrl && !/^https:\/\/.+/.test(v.registryUrl)) {
+    setStatus($('status'), 'Registry URL must be https.', 'err');
+    return;
   }
 
   try {
@@ -239,11 +234,11 @@ async function renderSelectorsState() {
     const res = await chrome.runtime.sendMessage({ cmd: 'manual-run', type: 'selectors_status', params: {} });
     const s = res?.data?.registry;
     if (!s) { el.textContent = '—'; return; }
-    if (!s.url) { el.textContent = 'not configured — jobs will stop until a registry URL is set'; return; }
-    if (s.error) { el.textContent = `unreachable: ${s.error}`; return; }
+    if (s.error) { el.textContent = `unreachable — ${s.error}`; return; }
     const n = (s.entries || []).length;
-    const withExtractor = (s.entries || []).filter((e) => e.has_extractor).length;
-    el.textContent = `${n} page types published · ${withExtractor} with an extractor · interface language ${s.uiLocale}`
+    const bytes = (s.entries || []).reduce((t, e) => t + (e.extract_js_bytes || 0), 0);
+    el.textContent = `${n} page types · ${(bytes / 1024).toFixed(0)} KB of extractors · interface in ${s.uiLocale}`
+      + (s.overridden ? ' · custom endpoint' : '')
       + (s.failures ? ` · ${s.failures.count} recent failures` : '');
   } catch {
     el.textContent = '—';
@@ -283,7 +278,7 @@ async function save() {
   catch (e) { console.error(e); granted = false; }
   if (!granted) { setStatus($('status'), 'Permission to contact your automation host was denied.', 'err'); return; }
 
-  const { registryUrl, registryWriteUrl, registryWriteToken, ...core } = next;
+  const { registryUrl, registryWriteToken, ...core } = next;
   await chrome.storage.local.set(core);
   // Goes through the command so the stored URL and the failure counter stay
   // consistent with each other.
@@ -293,7 +288,6 @@ async function save() {
       type: 'selectors_set_url',
       params: {
         url: registryUrl || null,
-        writeUrl: registryWriteUrl || null,
         writeToken: registryWriteToken || null,
       },
     });

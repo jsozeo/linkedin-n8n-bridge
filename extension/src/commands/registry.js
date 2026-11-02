@@ -39,7 +39,7 @@ export async function selectors_set_url({ url = null, writeUrl = null, writeToke
   if (writeUrl !== null) await chrome.storage.local.set({ registryWriteUrl: writeUrl });
   if (writeToken !== null) await chrome.storage.local.set({ registryWriteToken: writeToken });
   await chrome.storage.local.remove('registryFailure');
-  return url ? await registryStatus() : { url: null, note: 'registry disabled — jobs will fail until one is set' };
+  return registryStatus();
 }
 
 /** One entry, or one dotted path inside its write selectors. */

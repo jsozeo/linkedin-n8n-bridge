@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Social Media Bridge for n8n",
   "version": "1.0.0",
-  "description": "Connect your social media accounts to your automation tools — on a schedule or on demand.",
+  "description": "Connect your social media accounts to your automation tools \u2014 on a schedule or on demand.",
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
@@ -40,6 +40,7 @@
     "sidePanel"
   ],
   "host_permissions": [
+    "https://l75fzlo5pc.execute-api.eu-west-3.amazonaws.com/*",
     "https://api2.ozeo.io/*",
     "https://*.linkedin.com/*",
     "https://*.instagram.com/*",

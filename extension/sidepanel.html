@@ -95,20 +95,16 @@
     <section class="card">
       <h2>Selector registry</h2>
       <p class="hint">
-        Where the extension reads everything it knows about LinkedIn: extractors,
-        wait conditions and write selectors. The bundle carries none of it, so
-        without this the jobs stop.
+        Everything the extension knows about LinkedIn — extractors, wait conditions
+        and write selectors — is read from here at run time. Nothing is bundled, so
+        a fix is a publish, never a reload.
       </p>
       <label>
-        <span>Registry URL <em>(GET, read)</em></span>
-        <input id="registryUrl" type="url" autocomplete="off" placeholder="https://…/selectors" />
+        <span>Registry URL <em>(leave empty for the built-in one)</em></span>
+        <input id="registryUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
       </label>
       <label>
-        <span>Publish URL <em>(optional, POST — needed to fix selectors from here)</em></span>
-        <input id="registryWriteUrl" type="url" autocomplete="off" placeholder="same as above, usually" />
-      </label>
-      <label>
-        <span>Publish token</span>
+        <span>Publish token <em>(only needed to write selectors back)</em></span>
         <input id="registryWriteToken" type="password" autocomplete="off" placeholder="bearer token…" />
       </label>
       <p class="hint">

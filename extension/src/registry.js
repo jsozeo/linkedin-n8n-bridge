@@ -14,6 +14,11 @@
 
 import { evalInPage } from './cdp.js';
 
+// Where the registry lives. This is infrastructure, not business logic: the
+// address of the shelf belongs in the build, what sits on the shelf does not.
+// Overridable from the side panel for a staging endpoint.
+export const DEFAULT_REGISTRY_URL = 'https://l75fzlo5pc.execute-api.eu-west-3.amazonaws.com/registry';
+
 const URL_KEY = 'registryUrl';
 const LOCALE_KEY = 'uiLocale';
 const FAILURE_KEY = 'registryFailure';
@@ -34,7 +39,13 @@ function fail(message, code, extra = {}) {
 
 export async function registryUrl() {
   const { [URL_KEY]: url } = await chrome.storage.local.get([URL_KEY]);
-  return url || null;
+  return url || DEFAULT_REGISTRY_URL;
+}
+
+/** Whether the endpoint in use was overridden, which the status line reports. */
+export async function registryUrlIsOverridden() {
+  const { [URL_KEY]: url } = await chrome.storage.local.get([URL_KEY]);
+  return Boolean(url) && url !== DEFAULT_REGISTRY_URL;
 }
 
 /**
@@ -88,8 +99,6 @@ export async function lastKnownLocale() {
  */
 export async function resolveEntry({ url = null, pageType = null, locale = null } = {}) {
   const base = await registryUrl();
-  if (!base) throw fail('no registryUrl configured — set it in the side panel', 'REGISTRY_UNSET');
-
   const loc = locale || (await lastKnownLocale());
   const endpoint = new URL(base.replace(/\/+$/, '') + '/entry');
   endpoint.searchParams.set('locale', loc);
@@ -209,11 +218,11 @@ export async function registryStatus() {
   const base = await registryUrl();
   const out = {
     url: base,
+    overridden: await registryUrlIsOverridden(),
     uiLocale: await lastKnownLocale(),
     failures: await failureState(),
     entries: [],
   };
-  if (!base) return out;
   try {
     const res = await fetch(base.replace(/\/+$/, '') + '/index', {
       cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS),
