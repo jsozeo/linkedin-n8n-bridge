@@ -4,7 +4,10 @@ node_modules/
 .vscode/
 .idea/
 extension.zip
+extension*.zip
 dist/
+# Page captures used for selector work — tens of megabytes each.
+*.mhtml
 .env
 .env.*
 client_secret*.json
