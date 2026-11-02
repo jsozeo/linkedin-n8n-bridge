@@ -53,10 +53,10 @@ two people.
 
 **Deduplication.** `signals.pk` is globally unique and insert-ignored: the
 first initiative to find a post keeps it, the second insert is discarded.
-Two sessions pointed at the same keyword with the same query therefore
-duplicate each other's work and spend two accounts' exposure for one set of
-rows. A shared keyword only pays if the two sessions see different slices —
-different date window, geography, or sort order.
+Two sessions pointed at the same keyword therefore duplicate each other's
+work and spend two accounts' exposure for one set of rows. The agreed design
+is one keyword per session, so this stays a constraint to respect rather than
+a problem to solve.
 
 **Attribution.** `signals` records `initiative_id` but no session. If an
 account gets rate-limited there is no way to ask what that account scraped.
@@ -77,19 +77,36 @@ cannot be revoked on its own.
 ## Throughput, measured
 
 Ratios on 2026-11-02: 1 120 `qualify_post` verdicts produced 44
-`need_identified`, or **3.9 %**. A `get_post` job returned 15.7 items on
-average over 7 days, and 68 on the first run with the deeper scroll.
+`need_identified`, or **3.9 %**.
 
-Per session the physics are a 360–600 s gap (mean 8 min) inside a 12-hour
-window, so **90 jobs/day**, shared between searches and the profile scrapes
-their results generate.
+Three searches were run back to back the same evening to measure the rest:
+
+| keyword | posts | duration | served after |
+|---|---|---|---|
+| wordpress | 71 | 61 s | 0 min |
+| woocommerce | 64 | 61 s | 9 min |
+| shopify | 69 | 61 s | 19 min |
+
+All three ran a second time against a window already searched earlier that
+day, and **added zero duplicates** — the day's per-keyword totals are exactly
+the sum of both runs. A repeat search on the same `past-24h` query is
+therefore worth close to a fresh one.
+
+Every job took 61 s, well under the 75 s budget, so `maxSteps: 30` is what
+bounds the yield, not `budgetMs`. There is room to scroll deeper.
+
+Per session the physics are a 360–600 s gap (mean 8 min, observed 9 and 10)
+inside a 12-hour window, so **90 job slots/day**, shared between searches and
+the profile scrapes their results generate.
 
 | | searches/day | posts/day | qualified/day | binding limit |
 |---|---|---|---|---|
-| today's rate | ~3 | 186 | ~7 | nothing — the scheduler enqueues too little |
-| current caps | 15 | 1 000 | ~39 | `post` cap of 1 000 |
-| one session, caps raised | 24 | ~1 630 | ~64 | the 8-minute gap |
+| current caps | 15 | 1 000 | ~39 | `post` cap, spent in ~2 h |
+| one session, caps raised | 25 | ~1 650 | ~64 | the 8-minute gap |
+| 4 sessions, one keyword each | 4 × 15 | 4 000 | ~156 | `post` cap per session |
 
-Beyond roughly **64 qualified posts a day** a second session is the only
-lever left, because shortening the gap is the one thing that trades directly
-against account safety. Each added session brings another ~64.
+At 68 posts a search the 1 000/day cap is exhausted inside two hours of a
+twelve-hour window, so raising it is the cheapest lever before adding an
+account. Beyond ~64 qualified a day on a single session, only a second
+session helps: shortening the gap is the one knob that trades directly
+against account safety.
