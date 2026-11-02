@@ -12,6 +12,9 @@ import * as evaluate from './evaluate.js';
 import * as screenshot from './screenshot.js';
 import * as cookies from './cookies.js';
 import * as social from './social.js';
+import * as write from './linkedinWrite.js';
+import * as registry from './registry.js';
+import * as probe from './probe.js';
 
 const handlers = {
   // Built-in
@@ -74,6 +77,22 @@ const handlers = {
   social_extract:      social.social_extract,
   list_social_skills:  social.list_social_skills,
   linkedin_extract:    social.linkedin_extract, // backwards-compatible alias
+
+  // LinkedIn write actions — budgeted in guard.js, selectors in selectors.js
+  linkedin_like_post:      write.linkedin_like_post,
+  linkedin_like_comment:   write.linkedin_like_comment,
+  linkedin_like_reply:     write.linkedin_like_reply,
+  linkedin_comment_post:   write.linkedin_comment_post,
+  linkedin_reply_comment:  write.linkedin_reply_comment,
+  linkedin_invite:         write.linkedin_invite,
+
+  // Cloud selector registry
+  selectors_status:  registry.selectors_status,
+  selectors_refresh: registry.selectors_refresh,
+  selectors_set_url: registry.selectors_set_url,
+  selectors_get:     registry.selectors_get,
+  selectors_patch:   registry.selectors_patch,
+  selectors_probe:   probe.selectors_probe,
 };
 
 export async function dispatch(type, params) {
