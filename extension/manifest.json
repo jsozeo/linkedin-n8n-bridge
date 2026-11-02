@@ -2,14 +2,14 @@
   "manifest_version": 3,
   "name": "Social Media Bridge for n8n",
   "version": "1.1.1",
-  "version_name": "1.1.1 · 2026-11-02 16:21 · from 00dcf87",
-  "description": "Connect your social media accounts to your automation tools — on a schedule or on demand.",
+  "version_name": "1.1.1 \u00b7 2026-11-02 16:21 \u00b7 from 00dcf87",
+  "description": "Connect your social media accounts to your automation tools \u2014 on a schedule or on demand.",
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
   },
   "options_ui": {
-    "page": "sidepanel.html",
+    "page": "settings.html",
     "open_in_tab": true
   },
   "side_panel": {

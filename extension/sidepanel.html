@@ -8,6 +8,7 @@
 <body class="sidepanel">
   <main>
     <header>
+      <button id="openSettings" class="cog" type="button" title="Settings — connection, registry, schedule, identity">&#9881;</button>
       <h1>Social Media Bridge for n8n</h1>
       <p class="sub">Connect your social accounts to your automations — scheduled or on demand.</p>
       <p class="build" id="buildStamp" title="The build Chrome is running. If this timestamp is older than your last stamp, the reload did not take. Click to copy."></p>
@@ -74,140 +75,27 @@
     </section>
 
     <section class="card">
-      <h2>Connection</h2>
-      <label>
-        <span>Automation poll webhook URL <em>(GET)</em></span>
-        <input id="pollUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
-      </label>
-      <label>
-        <span>Automation result webhook URL <em>(optional, POST)</em></span>
-        <input id="resultUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
-      </label>
-      <label>
-        <span>Shared token</span>
-        <input id="token" type="password" autocomplete="off" placeholder="a long random secret…" />
-      </label>
+      <h2>This page</h2>
       <p class="hint">
-        <button id="genToken" class="link" type="button">generate</button> ·
-        <button id="toggleTokenVis" class="link" type="button">show / hide</button>
+        Reads the tab you are looking at with the live registry — same waits, same
+        scroll, same extractor a scheduled job would use. Nothing is opened and
+        nothing is written.
       </p>
-    </section>
-
-    <section class="card">
-      <h2>Selector registry</h2>
-      <p class="hint">
-        Everything the extension knows about LinkedIn — extractors, wait conditions
-        and write selectors — is read from here at run time. Nothing is bundled, so
-        a fix is a publish, never a reload.
-      </p>
-      <label>
-        <span>Registry URL <em>(leave empty for the built-in one)</em></span>
-        <input id="registryUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
-      </label>
-      <label>
-        <span>Publish token <em>(only needed to write selectors back)</em></span>
-        <input id="registryWriteToken" type="password" autocomplete="off" placeholder="bearer token…" />
-      </label>
-      <p class="hint">
-        <button id="saveSelectors" class="link" type="button">save &amp; fetch</button> ·
-        <span id="selectorsState">—</span>
-      </p>
-    </section>
-
-    <section class="card">
-      <h2>Schedule</h2>
       <label class="inline">
-        <input id="enabled" type="checkbox" />
-        <span>Enable the scheduler</span>
+        <input id="readScroll" type="checkbox" checked />
+        <span>Scroll the page as a job would (needed for lists)</span>
       </label>
-
-      <label>
-        <span>Quick preset</span>
-        <select id="preset">
-          <option value="">Custom (use the builder below)</option>
-          <option value="*/15 9-18 * * 1-5">Every 15 min · 9–18h · weekdays</option>
-          <option value="*/30 8-20 * * 1-5">Every 30 min · 8–20h · weekdays</option>
-          <option value="0 9-18 * * 1-5">Hourly · 9–18h · weekdays</option>
-          <option value="*/15 * * * *">Every 15 min · 24/7</option>
-          <option value="0 9 * * 1-5">Weekdays at 09:00</option>
-          <option value="0 9 * * *">Every day at 09:00</option>
-        </select>
-      </label>
-
-      <div class="builder">
-        <label>
-          <span>Run</span>
-          <select id="bFreq">
-            <option value="5">every 5 minutes</option>
-            <option value="10">every 10 minutes</option>
-            <option value="15">every 15 minutes</option>
-            <option value="30">every 30 minutes</option>
-            <option value="60">once per hour (at :00)</option>
-            <option value="once">once per day (at start hour)</option>
-          </select>
-        </label>
-        <div class="row2">
-          <label><span>From hour</span><select id="bFrom"></select></label>
-          <label><span>To hour</span><select id="bTo"></select></label>
-        </div>
-        <label class="inline">
-          <input id="bAllDay" type="checkbox" />
-          <span>All day (any hour)</span>
-        </label>
-        <label><span>On days</span></label>
-        <div class="days" id="bDays">
-          <label class="daychip"><input type="checkbox" value="1"><span>Mon</span></label>
-          <label class="daychip"><input type="checkbox" value="2"><span>Tue</span></label>
-          <label class="daychip"><input type="checkbox" value="3"><span>Wed</span></label>
-          <label class="daychip"><input type="checkbox" value="4"><span>Thu</span></label>
-          <label class="daychip"><input type="checkbox" value="5"><span>Fri</span></label>
-          <label class="daychip"><input type="checkbox" value="6"><span>Sat</span></label>
-          <label class="daychip"><input type="checkbox" value="0"><span>Sun</span></label>
-        </div>
-        <div class="daypresets">
-          <button type="button" class="ghost small" data-days="1,2,3,4,5">Weekdays</button>
-          <button type="button" class="ghost small" data-days="6,0">Weekend</button>
-          <button type="button" class="ghost small" data-days="all">Every day</button>
-        </div>
+      <div class="actions tight">
+        <button id="readPage" class="primary" type="button">Read this page</button>
+        <button id="openCapture" class="ghost" type="button">Open full width</button>
       </div>
-
-      <label>
-        <span>Cron expression <em>(advanced — 5 fields, local time)</em></span>
-        <input id="cron" type="text" autocomplete="off" placeholder="*/15 9-18 * * 1-5" />
-      </label>
-      <p id="cronInfo" class="hint"></p>
-    </section>
-
-    <section class="card">
-      <h2>Identity</h2>
-      <label>
-        <span>Client ID</span>
-        <div class="row">
-          <input id="clientId" type="text" autocomplete="off" placeholder="auto-generated…" />
-          <button id="regenClientId" class="ghost" type="button">Regen</button>
-        </div>
-      </label>
-      <p class="hint">
-        A random ID for <strong>this browser</strong>, sent as <code>clientId</code> with every request.
-        It lets one workflow serve several browsers — e.g. route tasks to a specific machine, or tell
-        results apart. If you only use one browser you can ignore it. It is not a secret.
-      </p>
-    </section>
-
-    <section class="actions">
-      <button id="save" class="primary" type="button">Save</button>
-      <button id="runNow" class="ghost" type="button">Run now</button>
-      <button id="clear" class="danger" type="button">Clear all</button>
-      <span id="status" class="status"></span>
+      <p id="readState" class="hint">—</p>
     </section>
 
     <section class="card subtle">
       <h2>Status</h2>
       <div id="statusSummary" class="statusbox">loading…</div>
-      <details>
-        <summary>Raw storage</summary>
-        <pre id="diagnostics"></pre>
-      </details>
+      <p class="hint"><button id="openSettings2" class="link" type="button">open settings</button></p>
     </section>
   </main>
   <script src="sidepanel.js" type="module"></script>

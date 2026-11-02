@@ -74,8 +74,9 @@ const handlers = {
   clear_cookies: cookies.clear_cookies,
 
   // Social-media high-level extraction
-  social_extract:      social.social_extract,
-  list_social_skills:  social.list_social_skills,
+  social_extract:        social.social_extract,
+  extract_current_page:  social.extract_current_page,
+  list_social_skills:    social.list_social_skills,
   linkedin_extract:    social.linkedin_extract, // backwards-compatible alias
 
   // LinkedIn write actions — budgeted in guard.js, selectors come from the cloud registry

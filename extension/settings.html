@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Social Media Bridge — settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body class="fullpage">
+  <main>
+    <header>
+      <h1>Social Media Bridge for n8n</h1>
+      <p class="sub">Everything that is set once and then forgotten.</p>
+      <p class="build" id="buildStamp" title="The build Chrome is running. If this timestamp is older than your last stamp, the reload did not take. Click to copy."></p>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button type="button" class="tab" data-view="settings">Settings</button>
+      <button type="button" class="tab" data-view="capture">Page data</button>
+    </nav>
+
+    <!-- ------------------------------------------------------------------ -->
+    <div class="view" id="view-settings">
+
+      <section class="card">
+        <h2>Connection</h2>
+        <label>
+          <span>Automation poll webhook URL <em>(GET)</em></span>
+          <input id="pollUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
+        </label>
+        <label>
+          <span>Automation result webhook URL <em>(optional, POST)</em></span>
+          <input id="resultUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
+        </label>
+        <label>
+          <span>Shared token</span>
+          <input id="token" type="password" autocomplete="off" placeholder="a long random secret…" />
+        </label>
+        <p class="hint">
+          <button id="genToken" class="link" type="button">generate</button> ·
+          <button id="toggleTokenVis" class="link" type="button">show / hide</button>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Selector registry</h2>
+        <p class="hint">
+          Everything the extension knows about LinkedIn — extractors, wait conditions
+          and write selectors — is read from here at run time. Nothing is bundled, so
+          a fix is a publish, never a reload.
+        </p>
+        <label>
+          <span>Registry URL <em>(leave empty for the built-in one)</em></span>
+          <input id="registryUrl" type="url" autocomplete="off" placeholder="using the built-in endpoint" />
+        </label>
+        <label>
+          <span>Publish token <em>(only needed to write selectors back)</em></span>
+          <input id="registryWriteToken" type="password" autocomplete="off" placeholder="bearer token…" />
+        </label>
+        <p class="hint">
+          <button id="saveSelectors" class="link" type="button">save &amp; fetch</button> ·
+          <span id="selectorsState">—</span>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Schedule</h2>
+        <label class="inline">
+          <input id="enabled" type="checkbox" />
+          <span>Enable the scheduler</span>
+        </label>
+
+        <label>
+          <span>Quick preset</span>
+          <select id="preset">
+            <option value="">Custom (use the builder below)</option>
+            <option value="*/15 9-18 * * 1-5">Every 15 min · 9–18h · weekdays</option>
+            <option value="*/30 8-20 * * 1-5">Every 30 min · 8–20h · weekdays</option>
+            <option value="0 9-18 * * 1-5">Hourly · 9–18h · weekdays</option>
+            <option value="*/15 * * * *">Every 15 min · 24/7</option>
+            <option value="0 9 * * 1-5">Weekdays at 09:00</option>
+            <option value="0 9 * * *">Every day at 09:00</option>
+          </select>
+        </label>
+
+        <div class="builder">
+          <label>
+            <span>Run</span>
+            <select id="bFreq">
+              <option value="5">every 5 minutes</option>
+              <option value="10">every 10 minutes</option>
+              <option value="15">every 15 minutes</option>
+              <option value="30">every 30 minutes</option>
+              <option value="60">once per hour (at :00)</option>
+              <option value="once">once per day (at start hour)</option>
+            </select>
+          </label>
+          <div class="row2">
+            <label><span>From hour</span><select id="bFrom"></select></label>
+            <label><span>To hour</span><select id="bTo"></select></label>
+          </div>
+          <label class="inline">
+            <input id="bAllDay" type="checkbox" />
+            <span>All day (any hour)</span>
+          </label>
+          <label><span>On days</span></label>
+          <div class="days" id="bDays">
+            <label class="daychip"><input type="checkbox" value="1"><span>Mon</span></label>
+            <label class="daychip"><input type="checkbox" value="2"><span>Tue</span></label>
+            <label class="daychip"><input type="checkbox" value="3"><span>Wed</span></label>
+            <label class="daychip"><input type="checkbox" value="4"><span>Thu</span></label>
+            <label class="daychip"><input type="checkbox" value="5"><span>Fri</span></label>
+            <label class="daychip"><input type="checkbox" value="6"><span>Sat</span></label>
+            <label class="daychip"><input type="checkbox" value="0"><span>Sun</span></label>
+          </div>
+          <div class="daypresets">
+            <button type="button" class="ghost small" data-days="1,2,3,4,5">Weekdays</button>
+            <button type="button" class="ghost small" data-days="6,0">Weekend</button>
+            <button type="button" class="ghost small" data-days="all">Every day</button>
+          </div>
+        </div>
+
+        <label>
+          <span>Cron expression <em>(advanced — 5 fields, local time)</em></span>
+          <input id="cron" type="text" autocomplete="off" placeholder="*/15 9-18 * * 1-5" />
+        </label>
+        <p id="cronInfo" class="hint"></p>
+      </section>
+
+      <section class="card">
+        <h2>Identity</h2>
+        <label>
+          <span>Client ID</span>
+          <div class="row">
+            <input id="clientId" type="text" autocomplete="off" placeholder="auto-generated…" />
+            <button id="regenClientId" class="ghost" type="button">Regen</button>
+          </div>
+        </label>
+        <p class="hint">
+          A random ID for <strong>this browser</strong>, sent as <code>clientId</code> with every request.
+          Your automation can filter on it, so changing it silently stops every job —
+          it is not a secret, but it is not disposable either.
+        </p>
+      </section>
+
+      <section class="actions">
+        <button id="save" class="primary" type="button">Save</button>
+        <button id="runNow" class="ghost" type="button">Run now</button>
+        <button id="clear" class="danger" type="button">Clear all</button>
+        <span id="status" class="status"></span>
+      </section>
+
+      <section class="card subtle">
+        <h2>Status</h2>
+        <div id="statusSummary" class="statusbox">loading…</div>
+        <details>
+          <summary>Raw storage</summary>
+          <pre id="diagnostics"></pre>
+        </details>
+      </section>
+    </div>
+
+    <!-- ------------------------------------------------------------------ -->
+    <div class="view" id="view-capture" hidden>
+      <section class="card accent">
+        <h2>Last page read</h2>
+        <div id="captureMeta" class="statusbox">Nothing captured yet. Use <strong>Read this page</strong> in the side panel.</div>
+        <div class="actions tight" id="captureActions" hidden>
+          <button id="captureCopy" class="ghost" type="button">Copy JSON</button>
+          <button id="captureDownload" class="ghost" type="button">Download</button>
+          <button id="captureClear" class="danger" type="button">Clear</button>
+          <span id="captureStatus" class="status"></span>
+        </div>
+      </section>
+
+      <section class="card" id="captureStepsCard" hidden>
+        <h2>What it did</h2>
+        <div id="captureSteps" class="steps"></div>
+      </section>
+
+      <section class="card" id="captureFieldsCard" hidden>
+        <h2>Fields</h2>
+        <div id="captureFields" class="fields"></div>
+      </section>
+
+      <section class="card" id="captureJsonCard" hidden>
+        <h2>Raw result</h2>
+        <pre id="captureJson" class="wide"></pre>
+      </section>
+    </div>
+  </main>
+  <script src="settings.js" type="module"></script>
+</body>
+</html>

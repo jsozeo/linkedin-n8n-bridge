@@ -160,3 +160,44 @@ pre {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Full-width page: the drawer is 350 px, this is where data becomes readable. */
+body.fullpage main { max-width: 1180px; margin: 28px auto; padding: 0 28px 80px; }
+body.fullpage header { position: relative; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.tabs .tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tabs .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+
+/* The cog sits in the drawer header, out of the way of the title. */
+.cog {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.cog:hover { color: var(--fg); }
+body.sidepanel header { position: relative; }
+
+/* Field list: the point is to see at a glance what came back empty. */
+.fields { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 16px; font-size: 13px; }
+.field { display: contents; }
+.fk { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.fv { word-break: break-word; }
+.fv.empty { color: var(--danger); font-style: italic; }
+
+pre.wide { max-height: 70vh; overflow: auto; }

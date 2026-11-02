@@ -122,6 +122,75 @@ async function infiniteScrollExtract({ tabId, skill, s, onStep, extractJs }) {
 }
 
 /**
+ * Everything that happens once a tab is sitting on the right page: re-read the
+ * locale, honour the declared waits, scroll the way the entry asks, extract.
+ * Shared so that running against an already-open tab is the same code path as
+ * a scheduled job, not a second implementation that can drift from it.
+ */
+async function runOnTab({ tabId, skill, entry, onStep }) {
+  // The entry had to be resolved before the tab existed, using the language
+  // seen last time. Re-read it now: it is remembered for the next job, and a
+  // mismatch is reported rather than silently tolerated.
+  const locale = await detectLocale(tabId);
+  if (entry.ui_locale !== 'any' && locale !== entry.ui_locale) {
+    onStep('locale_changed', { page: locale, entry: entry.ui_locale });
+  }
+
+  for (const sel of skill.WAIT_SELECTORS || ['body']) {
+    try {
+      await wait_for_selector({ tabId, selector: sel, timeoutMs: 20_000 });
+      onStep('wait_for_selector', { sel });
+    } catch (e) {
+      onStep('wait_for_selector_failed', { sel, message: e.message });
+    }
+  }
+
+  if (skill.WAIT_PREDICATE_JS) {
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      const { value } = await evaluate_js({ tabId, expression: skill.WAIT_PREDICATE_JS });
+      if (value) break;
+      await sleep(400);
+    }
+    onStep('wait_predicate', {});
+  }
+
+  // Scroll + extract. Two strategies:
+  //   - fixed paliers ('window'/'pane'): scroll a few times, extract once.
+  //   - 'infinite': virtualized/infinite lists (search, feeds) recycle
+  //     off-screen nodes, so we extract after every scroll and merge —
+  //     otherwise the posts at the top are gone from the DOM by the time we
+  //     reach the bottom.
+  const s = skill.SCROLL || { strategy: 'window', steps: [20, 40, 60, 80, 100], delayMs: 1500 };
+  const extractJs = skill.EXTRACT_JS;
+
+  if (s.strategy === 'infinite') {
+    return infiniteScrollExtract({ tabId, skill, s, onStep, extractJs });
+  }
+
+  for (const pct of s.steps) {
+    const params = { tabId, percent: pct, durationMs: 700 };
+    if (s.strategy === 'pane' && s.selector) params.selector = s.selector;
+    try {
+      await scrollCmd(params);
+      onStep('scroll', { pct });
+    } catch (e) {
+      onStep('scroll_failed', { pct, message: e.message });
+    }
+    await sleep(s.delayMs);
+  }
+  await sleep(800); // settle in-flight XHR from the last scroll
+
+  onStep('extract', {});
+  const { value } = await evaluate_js({
+    tabId,
+    expression: extractJs,
+    awaitPromise: skill.AWAIT_PROMISE === true,
+  });
+  return value;
+}
+
+/**
  * @param {object} params
  * @param {string} params.url             Social-media URL to extract from
  * @param {string} [params.kind]          Force an extractor: full ID ('linkedin.profile') or bare type ('profile')
@@ -162,67 +231,7 @@ export async function social_extract({ url, kind, platform, active = false, keep
     tabId = opened.tabId;
     onStep('tab_opened', { tabId });
 
-    // The entry had to be resolved before the tab existed, using the language
-    // seen last time. Re-read it now: it is remembered for the next job, and a
-    // mismatch is reported rather than silently tolerated.
-    const locale = await detectLocale(tabId);
-    if (entry.ui_locale !== 'any' && locale !== entry.ui_locale) {
-      onStep('locale_changed', { page: locale, entry: entry.ui_locale });
-    }
-
-    for (const sel of skill.WAIT_SELECTORS || ['body']) {
-      try {
-        await wait_for_selector({ tabId, selector: sel, timeoutMs: 20_000 });
-        onStep('wait_for_selector', { sel });
-      } catch (e) {
-        onStep('wait_for_selector_failed', { sel, message: e.message });
-      }
-    }
-
-    if (skill.WAIT_PREDICATE_JS) {
-      const deadline = Date.now() + 20_000;
-      while (Date.now() < deadline) {
-        const { value } = await evaluate_js({ tabId, expression: skill.WAIT_PREDICATE_JS });
-        if (value) break;
-        await sleep(400);
-      }
-      onStep('wait_predicate', {});
-    }
-
-    // Scroll + extract. Two strategies:
-    //   - fixed paliers ('window'/'pane'): scroll a few times, extract once.
-    //   - 'infinite': virtualized/infinite lists (search, feeds) recycle
-    //     off-screen nodes, so we extract after every scroll and merge —
-    //     otherwise the posts at the top are gone from the DOM by the time we
-    //     reach the bottom.
-    const s = skill.SCROLL || { strategy: 'window', steps: [20, 40, 60, 80, 100], delayMs: 1500 };
-
-    const extractJs = skill.EXTRACT_JS;
-
-    let raw;
-    if (s.strategy === 'infinite') {
-      raw = await infiniteScrollExtract({ tabId, skill, s, onStep, extractJs });
-    } else {
-      for (const pct of s.steps) {
-        const params = { tabId, percent: pct, durationMs: 700 };
-        if (s.strategy === 'pane' && s.selector) params.selector = s.selector;
-        try {
-          await scrollCmd(params);
-          onStep('scroll', { pct });
-        } catch (e) {
-          onStep('scroll_failed', { pct, message: e.message });
-        }
-        await sleep(s.delayMs);
-      }
-      await sleep(800); // settle in-flight XHR from the last scroll
-
-      onStep('extract', {});
-      ({ value: raw } = await evaluate_js({
-        tabId,
-        expression: extractJs,
-        awaitPromise: skill.AWAIT_PROMISE === true,
-      }));
-    }
+    const raw = await runOnTab({ tabId, skill, entry, onStep });
 
     let result = raw;
     if (typeof skill.POST_EXTRACT === 'function') {
@@ -251,6 +260,80 @@ export async function social_extract({ url, kind, platform, active = false, keep
       try { await close_tab({ tabId }); } catch { /* tab already gone */ }
     }
   }
+}
+
+/**
+ * Extract the page the user is already looking at, without opening or
+ * navigating anything. This is the "does the registry still work here?"
+ * button: it runs the exact pipeline a scheduled job would run, so a result
+ * here means a job would succeed, and a failure here is the same failure.
+ *
+ * @param {object} [params]
+ * @param {string} [params.kind]   Force a page type instead of matching the URL
+ * @param {boolean} [params.scroll=true] Honour the entry's scroll plan. Turning
+ *        it off keeps the user's scroll position but will under-report lists.
+ */
+export async function extract_current_page({ kind = null, scroll = true } = {}) {
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab?.id) { const e = new Error('no active tab to read'); e.code = 'NO_TAB'; throw e; }
+  const url = tab.url || '';
+  if (!/^https?:/.test(url)) {
+    const e = new Error(`this tab is not a web page (${url.split(':')[0] || 'unknown'}:) — open the page you want to check first`);
+    e.code = 'BAD_PARAMS';
+    throw e;
+  }
+
+  const steps = [];
+  const onStep = (label, info = {}) => steps.push({ label, ...info, at: Date.now() });
+  const start = Date.now();
+
+  let entry;
+  try {
+    entry = await resolveEntry({ url, pageType: pageTypeFromKind(kind) });
+  } catch (e) {
+    if (e.code === 'REGISTRY_MISS') {
+      const known = (e.known || []).join(', ');
+      const miss = new Error(
+        `No page type in the registry matches this URL. Nothing was read.`
+        + (known ? ` Published types: ${known}.` : ''),
+      );
+      miss.code = 'NO_PAGE_TYPE';
+      miss.url = url;
+      miss.known = e.known || [];
+      throw miss;
+    }
+    throw e;
+  }
+
+  const skill = skillFromEntry(entry, url);
+  onStep('registry_entry', {
+    page_type: entry.page_type,
+    ui_locale: entry.ui_locale,
+    version: entry.version,
+    bytes: skill.EXTRACT_JS.length,
+  });
+
+  // The entry may normalise the URL (e.g. a profile's /details/ sub-page back
+  // to the profile root). We do not navigate, so say so rather than pretend.
+  if (skill.normalizedUrl && skill.normalizedUrl !== url) {
+    onStep('url_not_normalized', { would_use: skill.normalizedUrl, reading: url });
+  }
+
+  const quiet = { ...skill, SCROLL: scroll ? skill.SCROLL : { strategy: 'window', steps: [], delayMs: 0 } };
+  const result = await runOnTab({ tabId: tab.id, skill: quiet, entry, onStep });
+  onStep('done', { durationMs: Date.now() - start });
+
+  return {
+    url,
+    tabTitle: tab.title || null,
+    pageType: entry.page_type,
+    uiLocale: entry.ui_locale,
+    registryVersion: entry.version,
+    scrolled: Boolean(scroll && skill.SCROLL),
+    durationMs: Date.now() - start,
+    result,
+    steps,
+  };
 }
 
 // Backwards-compatible alias.
