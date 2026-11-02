@@ -240,12 +240,28 @@ export async function registryRoute({ s3, bucket, method, path, qs, body, author
     if (!authorized) return json(401, { error: 'unauthorized' });
     const { page_type: pageType, locale } = qs;
     if (!pageType || !locale) return json(400, { error: 'page_type and locale are required' });
-    const prefix = `${entryPrefix({ tenant, platform, pageType, locale })}/versions/`;
+
+    // Resolve the locale the way /entry does, otherwise asking for `en` on a
+    // locale-independent entry returns an empty history instead of saying so.
+    const idx = await readJson(s3, bucket, indexKey({ tenant, platform }));
+    const hit = pickByLocale((idx?.entries || []).filter((e) => e.page_type === pageType), locale);
+    if (!hit) {
+      return json(404, {
+        error: 'no entry for this page type in this locale',
+        page_type: pageType, ui_locale: locale,
+        known: (idx?.entries || []).map((e) => `${e.page_type}/${e.ui_locale}`),
+      }, NO_STORE);
+    }
+    const prefix = `${entryPrefix({ tenant, platform, pageType, locale: hit.ui_locale })}/versions/`;
     const out = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }));
     const versions = (out.Contents || [])
       .map((o) => ({ version: o.Key.slice(prefix.length).replace(/\.json$/, ''), bytes: o.Size, at: o.LastModified }))
       .sort((a, b) => String(b.version).localeCompare(String(a.version)));
-    return json(200, { tenant, platform, page_type: pageType, ui_locale: locale, versions }, NO_STORE);
+    return json(200, {
+      tenant, platform, page_type: pageType,
+      ui_locale: hit.ui_locale, requested_locale: locale,
+      published: hit.version, versions,
+    }, NO_STORE);
   }
 
   if (method === 'GET' && clean.endsWith('/registry/entry')) {
