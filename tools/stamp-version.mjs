@@ -5,8 +5,10 @@
 //   node tools/stamp-version.mjs 1.2.0      set an explicit version
 //   node tools/stamp-version.mjs --same     keep the version, refresh the stamp
 //
-// version_name carries the commit, so comparing what the side panel shows with
-// `git log -1 --format=%h` tells you whether Chrome is running your latest edits.
+// The timestamp is the identity: it changes on every stamp, so if the side
+// panel shows an older one than the stamp you just made, Chrome has not
+// reloaded. The sha is the commit the build was cut from — necessarily the
+// parent of the commit that records the stamp itself.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -47,7 +49,7 @@ const dirty = git('status', '--porcelain') ? '+local' : '';
 const stampedAt = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
 manifest.version = version;
-manifest.version_name = `${version} · ${sha}${dirty} · ${stampedAt}`;
+manifest.version_name = `${version} · ${stampedAt} · from ${sha}${dirty}`;
 
 // Keep version_name right after version instead of wherever a re-serialise lands it.
 const ordered = {};

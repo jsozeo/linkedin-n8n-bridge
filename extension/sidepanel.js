@@ -15,8 +15,8 @@ function setStatus(el, msg, kind = '') {
 }
 
 // Which build is actually running. version_name is stamped by
-// tools/stamp-version.mjs and carries the commit, so a mismatch with the
-// checkout means Chrome is still serving the previous load.
+// tools/stamp-version.mjs; a timestamp older than the last stamp means the
+// reload never took.
 function renderBuildStamp() {
   const el = $('buildStamp');
   if (!el) return;
