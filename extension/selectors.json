@@ -1,0 +1,164 @@
+{
+  "version": "sel-2026-11-02-sdui",
+  "linkedin": {
+    "commentRowMarkers": [
+      "[id^=\"replaceableComment_urn:li:comment:\"]",
+      "article[data-id^=\"urn:li:comment:\"]",
+      "article.comments-comment-entity"
+    ],
+    "reaction": {
+      "button": [
+        "[aria-label^=\"Reaction button state\"]"
+      ],
+      "unreactedLabel": [
+        "no reaction"
+      ]
+    },
+    "post": {
+      "root": [
+        "main [data-urn^=\"urn:li:activity:\"]",
+        "div.feed-shared-update-v2",
+        "main#workspace",
+        "main"
+      ],
+      "likeButton": [
+        "[aria-label^=\"Reaction button state\"]",
+        "button[aria-label^=\"React Like\"]",
+        "button.react-button__trigger"
+      ],
+      "commentButton": [
+        "button[aria-label^=\"Comment\"]",
+        "button.comment-button"
+      ]
+    },
+    "composer": {
+      "box": [
+        "[aria-label=\"Text editor for creating comment\"]",
+        "[data-testid=\"ui-core-tiptap-text-editor-wrapper\"] [role=\"textbox\"]",
+        "div.ql-editor[contenteditable=\"true\"]",
+        "div[role=\"textbox\"][contenteditable=\"true\"]"
+      ],
+      "submit": [
+        "button[aria-label^=\"Submit comment\"]",
+        "button[aria-label^=\"Post comment\"]",
+        "button[aria-label=\"Reply\"][type=\"submit\"]",
+        "button[type=\"submit\"]",
+        "button[aria-label^=\"Submit\"]"
+      ],
+      "accessories": [
+        "[aria-label=\"Show Emoji Picker\"]",
+        "[aria-label=\"Open GIF picker\"]",
+        "[aria-label=\"Share photo\"]",
+        "[aria-label^=\"Mention\"]",
+        "[aria-label^=\"Add a\"]",
+        "[aria-label^=\"Open control menu\"]",
+        "[aria-label^=\"Open reactions menu\"]",
+        "[aria-label^=\"View more options\"]",
+        "[aria-label=\"Repost\"]",
+        "[aria-label=\"Comment\"]",
+        "[aria-label^=\"Reaction button state\"]",
+        "[aria-label=\"Dismiss\"]",
+        {
+          "text": "Most relevant"
+        },
+        {
+          "text": "Most recent"
+        },
+        {
+          "text": "Les plus pertinents"
+        },
+        {
+          "text": "Les plus récents"
+        },
+        {
+          "text": "Follow"
+        },
+        {
+          "text": "Suivre"
+        }
+      ]
+    },
+    "comment": {
+      "row": [
+        "[id^=\"replaceableComment_urn:li:comment:\"]",
+        "article[data-id^=\"urn:li:comment:\"]",
+        "article.comments-comment-entity"
+      ],
+      "urnAttr": [
+        "id",
+        "data-id"
+      ],
+      "author": [
+        "[aria-label^=\"View more options for \"]",
+        ".comments-comment-meta__description-title"
+      ],
+      "text": [
+        "[data-testid=\"expandable-text-box\"]",
+        ".comments-comment-item__main-content"
+      ],
+      "likeButton": [
+        "[aria-label^=\"Reaction button state\"]",
+        "button[aria-label^=\"React Like\"]"
+      ],
+      "replyButton": [
+        "button[aria-label=\"Reply\"]",
+        "button[aria-label^=\"Reply\"]",
+        "button.comments-comment-social-bar__reply-action-button--cr"
+      ],
+      "repliesContainer": [
+        ".comments-replies-list",
+        ".comments-comment-item__replies-list"
+      ],
+      "showMoreReplies": [
+        {
+          "text": "See previous replies"
+        },
+        {
+          "text": "Voir les réponses précédentes"
+        },
+        {
+          "text": "Load previous replies"
+        },
+        "button[aria-label*=\"previous repl\"]",
+        "button[aria-label*=\"more repl\"]"
+      ]
+    },
+    "profile": {
+      "connectButton": [
+        "main button[aria-label^=\"Invite\"][aria-label*=\"connect\"]",
+        "main button[aria-label^=\"Connect\"]"
+      ],
+      "moreButton": [
+        "main button[aria-label=\"More actions\"]",
+        "main button[aria-label^=\"More\"]"
+      ],
+      "moreConnectItem": [
+        "div[aria-label^=\"Invite\"][aria-label*=\"connect\"]",
+        ".artdeco-dropdown__content li div[aria-label^=\"Invite\"]"
+      ],
+      "sendWithoutNote": [
+        "button[aria-label=\"Send without a note\"]",
+        "button[aria-label^=\"Send without\"]"
+      ],
+      "addNote": [
+        "button[aria-label=\"Add a note\"]"
+      ],
+      "noteBox": [
+        "textarea#custom-message",
+        "textarea[name=\"message\"]"
+      ],
+      "sendInvite": [
+        "button[aria-label=\"Send invitation\"]",
+        "button[aria-label^=\"Send now\"]"
+      ],
+      "pendingMarker": [
+        "main button[aria-label^=\"Pending\"]",
+        "main button[aria-label*=\"withdraw invitation\"]"
+      ],
+      "dismissModal": [
+        "button[aria-label=\"Dismiss\"]"
+      ]
+    }
+  },
+  "_note": "Registre de selecteurs LinkedIn. Corrige depuis l extension via selectors_probe puis selectors_patch — aucun rechargement requis. Chaque entree est une LISTE de candidats essayes dans l ordre ; une entree peut aussi etre {\"text\":\"...\"} pour cibler par le texte visible."
+}

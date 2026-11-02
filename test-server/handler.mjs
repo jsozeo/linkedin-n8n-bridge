@@ -54,6 +54,19 @@ export const handler = async (event) => {
   const host = headers.host || headers.Host || '';
   const qs = event?.queryStringParameters || {};
 
+  // Selector registry. Public for the same reason as /extractor: it is DOM
+  // trivia, not a secret, and the extension fetches it on every cycle so a
+  // LinkedIn redesign is fixed by `push-selectors.sh`, never by a reload.
+  if (method === 'GET' && path.replace(/\/+$/, '').endsWith('/selectors')) {
+    const doc = await getObjectText('selectors.json');
+    if (doc == null) return json(404, { error: 'no selectors.json in the bucket' });
+    return {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+      body: doc,
+    };
+  }
+
   // Parser code is public (dev-only, not secret) so the extension can fetch it
   // without threading the token through the CDP-injected fetch.
   if (method === 'GET' && path.replace(/\/+$/, '').endsWith('/extractor')) {
@@ -65,6 +78,22 @@ export const handler = async (event) => {
 
   const auth = headers.authorization || headers.Authorization || '';
   if (TOKEN && auth !== `Bearer ${TOKEN}`) return json(401, { error: 'unauthorized' });
+
+  // Publishing a selector fix. Token-protected, unlike the read side, and the
+  // previous document is kept so a bad push can be rolled back.
+  if (method === 'POST' && path.replace(/\/+$/, '').endsWith('/selectors')) {
+    const doc = parseBody(event);
+    if (!doc || !doc.linkedin || !doc.version) {
+      return json(400, { error: 'body must be a selector document with linkedin + version' });
+    }
+    const previous = await getObjectText('selectors.json');
+    if (previous) {
+      await put(`selectors-history/${new Date().toISOString().replace(/[:.]/g, '-')}.json`, previous, 'application/json');
+    }
+    const body = JSON.stringify(doc, null, 2);
+    await put('selectors.json', body, 'application/json');
+    return json(200, { ok: true, version: doc.version, bytes: body.length });
+  }
 
   if (method === 'GET') {
     const jobRaw = await getObjectText('job.json');
