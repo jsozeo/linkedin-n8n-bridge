@@ -285,15 +285,16 @@ async function save() {
 
   const { registryUrl, registryWriteUrl, registryWriteToken, ...core } = next;
   await chrome.storage.local.set(core);
-  // Goes through the command so the cached document is dropped when the URL moves.
+  // Goes through the command so the stored URL and the failure counter stay
+  // consistent with each other.
   try {
     await chrome.runtime.sendMessage({
       cmd: 'manual-run',
       type: 'selectors_set_url',
       params: {
-        url: selectorsUrl || null,
-        writeUrl: selectorsWriteUrl || null,
-        writeToken: selectorsWriteToken || null,
+        url: registryUrl || null,
+        writeUrl: registryWriteUrl || null,
+        writeToken: registryWriteToken || null,
       },
     });
   } catch (e) { console.error(e); }
